@@ -1,0 +1,15 @@
+export default {
+  'welcome': 'أهلا بك',
+  'home': 'الصفحة الرئيسية',
+  'dashboard': 'لوحة التحكم',
+  'students': 'الطلاب',
+  'trainings': 'التدريبات',
+  'messages': 'الرسائل',
+  'profile': 'الملف الشخصي',
+  'attendance': 'الحضور',
+  'certification': 'الشهادات',
+  'accessibility': 'إمكانية الوصول',
+  'login': 'تسجيل الدخول',
+  'logout': 'تسجيل الخروج',
+  'settings': 'الإعدادات',
+};

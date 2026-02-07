@@ -1,0 +1,15 @@
+export default {
+  'welcome': 'Welcome',
+  'home': 'Home',
+  'dashboard': 'Dashboard',
+  'students': 'Students',
+  'trainings': 'Trainings',
+  'messages': 'Messages',
+  'profile': 'Profile',
+  'attendance': 'Attendance',
+  'certification': 'Certification',
+  'accessibility': 'Accessibility',
+  'login': 'Login',
+  'logout': 'Logout',
+  'settings': 'Settings',
+};

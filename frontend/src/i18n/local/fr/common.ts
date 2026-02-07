@@ -1,0 +1,15 @@
+export default {
+  'welcome': 'Bienvenue',
+  'home': 'Accueil',
+  'dashboard': 'Tableau de bord',
+  'students': 'Élèves',
+  'trainings': 'Formations',
+  'messages': 'Messages',
+  'profile': 'Profil',
+  'attendance': 'Présences',
+  'certification': 'Certification',
+  'accessibility': 'Accessibilité',
+  'login': 'Connexion',
+  'logout': 'Déconnexion',
+  'settings': 'Paramètres',
+};

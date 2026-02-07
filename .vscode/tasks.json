@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Backend",
+      "type": "shell",
+      "command": "mvn",
+      "args": ["spring-boot:run"],
+      "cwd": "${workspaceFolder}/backend",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^.*$",
+          "line": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Starting.*",
+          "endsPattern": "^.*Tomcat started on"
+        }
+      }
+    },
+    {
+      "label": "Run Frontend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "cwd": "${workspaceFolder}/frontend",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^.*$",
+          "line": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*VITE.*",
+          "endsPattern": "^.*Local:.*"
+        }
+      }
+    },
+    {
+      "label": "Run Both Apps",
+      "dependsOn": ["Run Backend", "Run Frontend"],
+      "problemMatcher": []
+    }
+  ]
+}

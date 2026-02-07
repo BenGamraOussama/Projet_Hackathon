@@ -1,0 +1,323 @@
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { conversations, messages as allMessages } from '../../../mocks/messages';
+import Navbar from '../../../components/feature/Navbar';
+
+export default function ConversationDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [messageText, setMessageText] = useState('');
+  const [conversationMessages, setConversationMessages] = useState(
+    allMessages.filter(msg => msg.conversationId === id)
+  );
+  const [isTyping, setIsTyping] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const conversation = conversations.find(conv => conv.id === id);
+
+  const emojis = ['😊', '👍', '❤️', '😂', '🎉', '👏', '🔥', '✅', '💪', '🙏', '😍', '🤔', '👌', '💯', '🚀'];
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [conversationMessages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleSendMessage = () => {
+    if (!messageText.trim()) return;
+
+    const newMessage = {
+      id: `msg-${Date.now()}`,
+      conversationId: id || '',
+      senderId: 'current-user',
+      senderName: 'Moi',
+      content: messageText,
+      timestamp: new Date().toISOString(),
+      isRead: true
+    };
+
+    setConversationMessages([...conversationMessages, newMessage]);
+    setMessageText('');
+    setShowEmojiPicker(false);
+
+    // Simuler "en train d'écrire..."
+    setTimeout(() => {
+      setIsTyping(true);
+      setTimeout(() => {
+        setIsTyping(false);
+      }, 2000);
+    }, 500);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const formatMessageTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatMessageDate = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return "Aujourd'hui";
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return 'Hier';
+    } else {
+      return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    }
+  };
+
+  const addEmoji = (emoji: string) => {
+    setMessageText(messageText + emoji);
+  };
+
+  if (!conversation) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <div className="text-center">
+            <i className="ri-error-warning-line text-6xl text-gray-400 mb-4" aria-hidden="true"></i>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Conversation introuvable</h2>
+            <button
+              onClick={() => navigate('/messages')}
+              className="mt-4 px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors duration-200 cursor-pointer whitespace-nowrap"
+            >
+              Retour aux messages
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Grouper les messages par date
+  const groupedMessages: { [key: string]: typeof conversationMessages } = {};
+  conversationMessages.forEach(msg => {
+    const dateKey = formatMessageDate(msg.timestamp);
+    if (!groupedMessages[dateKey]) {
+      groupedMessages[dateKey] = [];
+    }
+    groupedMessages[dateKey].push(msg);
+  });
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <Navbar />
+      
+      {/* Header de conversation */}
+      <div className="bg-white border-b border-gray-200 sticky top-16 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate('/messages')}
+                className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors duration-200 cursor-pointer"
+                aria-label="Retour aux messages"
+              >
+                <i className="ri-arrow-left-line text-xl" aria-hidden="true"></i>
+              </button>
+              
+              <div className="relative">
+                <div className="w-12 h-12 flex items-center justify-center bg-gradient-to-br from-teal-500 to-teal-600 rounded-full text-white font-semibold text-lg">
+                  {conversation.participantAvatar}
+                </div>
+                {conversation.isOnline && (
+                  <div className="absolute bottom-0 right-0 w-3.5 h-3.5 flex items-center justify-center bg-green-500 border-2 border-white rounded-full"></div>
+                )}
+              </div>
+              
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">{conversation.participantName}</h2>
+                <p className="text-sm text-gray-500">
+                  {conversation.isOnline ? (
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 flex items-center justify-center bg-green-500 rounded-full"></span>
+                      En ligne
+                    </span>
+                  ) : (
+                    conversation.participantRole
+                  )}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <button
+                className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors duration-200 cursor-pointer"
+                aria-label="Rechercher dans la conversation"
+              >
+                <i className="ri-search-line text-xl" aria-hidden="true"></i>
+              </button>
+              <button
+                className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors duration-200 cursor-pointer"
+                aria-label="Plus d'options"
+              >
+                <i className="ri-more-2-line text-xl" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Zone des messages */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {Object.entries(groupedMessages).map(([date, msgs]) => (
+            <div key={date}>
+              {/* Séparateur de date */}
+              <div className="flex items-center justify-center my-6">
+                <div className="px-4 py-1.5 bg-gray-200 rounded-full">
+                  <span className="text-xs font-medium text-gray-600">{date}</span>
+                </div>
+              </div>
+
+              {/* Messages du jour */}
+              {msgs.map((message, index) => {
+                const isCurrentUser = message.senderId === 'current-user';
+                const showAvatar = !isCurrentUser && (index === 0 || msgs[index - 1].senderId !== message.senderId);
+
+                return (
+                  <div
+                    key={message.id}
+                    className={`flex items-end gap-2 mb-4 ${isCurrentUser ? 'flex-row-reverse' : 'flex-row'}`}
+                  >
+                    {/* Avatar */}
+                    <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+                      {showAvatar && !isCurrentUser && (
+                        <div className="w-8 h-8 flex items-center justify-center bg-gradient-to-br from-teal-500 to-teal-600 rounded-full text-white font-medium text-sm">
+                          {conversation.participantAvatar}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bulle de message */}
+                    <div className={`flex flex-col ${isCurrentUser ? 'items-end' : 'items-start'} max-w-[70%]`}>
+                      <div
+                        className={`px-4 py-2.5 rounded-2xl ${
+                          isCurrentUser
+                            ? 'bg-teal-600 text-white rounded-br-sm'
+                            : 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
+                        }`}
+                      >
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                          {message.content}
+                        </p>
+                      </div>
+                      
+                      {/* Heure et statut de lecture */}
+                      <div className="flex items-center gap-1 mt-1 px-1">
+                        <span className="text-xs text-gray-500">{formatMessageTime(message.timestamp)}</span>
+                        {isCurrentUser && (
+                          <i
+                            className={`text-xs ${
+                              message.isRead ? 'ri-check-double-line text-teal-600' : 'ri-check-line text-gray-400'
+                            }`}
+                            aria-hidden="true"
+                          ></i>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
+          {/* Indicateur "en train d'écrire..." */}
+          {isTyping && (
+            <div className="flex items-end gap-2 mb-4">
+              <div className="w-8 h-8 flex items-center justify-center bg-gradient-to-br from-teal-500 to-teal-600 rounded-full text-white font-medium text-sm">
+                {conversation.participantAvatar}
+              </div>
+              <div className="px-4 py-3 bg-white border border-gray-200 rounded-2xl rounded-bl-sm">
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 flex items-center justify-center bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                  <span className="w-2 h-2 flex items-center justify-center bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                  <span className="w-2 h-2 flex items-center justify-center bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* Zone de saisie */}
+      <div className="bg-white border-t border-gray-200 sticky bottom-0">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          {/* Sélecteur d'emojis */}
+          {showEmojiPicker && (
+            <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex flex-wrap gap-2">
+                {emojis.map((emoji, index) => (
+                  <button
+                    key={index}
+                    onClick={() => addEmoji(emoji)}
+                    className="text-2xl hover:scale-125 transition-transform duration-200 cursor-pointer"
+                    aria-label={`Ajouter emoji ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-end gap-3">
+            {/* Bouton emoji */}
+            <button
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className={`p-3 rounded-lg transition-colors duration-200 cursor-pointer ${
+                showEmojiPicker ? 'bg-teal-100 text-teal-600' : 'text-gray-500 hover:bg-gray-100'
+              }`}
+              aria-label="Emojis"
+            >
+              <i className="ri-emotion-line text-xl" aria-hidden="true"></i>
+            </button>
+
+            {/* Champ de saisie */}
+            <div className="flex-1 relative">
+              <textarea
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Écrivez votre message..."
+                rows={1}
+                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                style={{ minHeight: '48px', maxHeight: '120px' }}
+              />
+            </div>
+
+            {/* Bouton envoyer */}
+            <button
+              onClick={handleSendMessage}
+              disabled={!messageText.trim()}
+              className={`p-3 rounded-lg transition-colors duration-200 cursor-pointer whitespace-nowrap ${
+                messageText.trim()
+                  ? 'bg-teal-600 text-white hover:bg-teal-700'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+              aria-label="Envoyer le message"
+            >
+              <i className="ri-send-plane-fill text-xl" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
