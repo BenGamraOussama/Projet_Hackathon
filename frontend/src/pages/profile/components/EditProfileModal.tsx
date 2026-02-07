@@ -1,6 +1,5 @@
 
 import { useState } from 'react';
-import Card from '../../../components/base/Card';
 import Button from '../../../components/base/Button';
 
 interface EditProfileModalProps {

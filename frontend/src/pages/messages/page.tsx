@@ -29,6 +29,7 @@ export default function Messages() {
         // This is a simplified grouping logic. Ideally we need user details for names/avatars.
         // For demo, we might fall back to ID or fetch user details.
 
+        const isRead = msg.read ?? msg.isRead ?? false;
         if (!conversationMap.has(participantId)) {
           conversationMap.set(participantId, {
             id: participantId, // using participantId as conversation Id for simplicity
@@ -38,7 +39,7 @@ export default function Messages() {
             participantAvatar: 'U',
             lastMessage: msg.content,
             lastMessageTime: msg.timestamp,
-            unreadCount: (!msg.read && msg.recipientId === currentUserEmail) ? 1 : 0,
+            unreadCount: (!isRead && msg.recipientId === currentUserEmail) ? 1 : 0,
             isOnline: false
           });
         } else {
@@ -47,7 +48,7 @@ export default function Messages() {
             conv.lastMessage = msg.content;
             conv.lastMessageTime = msg.timestamp;
           }
-          if (!msg.read && msg.recipientId === currentUserEmail) {
+          if (!isRead && msg.recipientId === currentUserEmail) {
             conv.unreadCount += 1;
           }
         }
@@ -63,7 +64,7 @@ export default function Messages() {
 
   const filteredConversations = conversations.filter(conv => {
     const matchesSearch = conv.participantName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
+      (conv.lastMessage || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = selectedFilter === 'all' || (selectedFilter === 'unread' && conv.unreadCount > 0);
     return matchesSearch && matchesFilter;
   });
@@ -92,9 +93,7 @@ export default function Messages() {
       // Navigate to existing conversation
       navigate(`/messages/${existingConversation.id}`);
     } else {
-      // In a real app, create a new conversation
-      // For now, just navigate to the first conversation as a demo
-      navigate(`/messages/1`);
+      navigate(`/messages/${trainerId}`);
     }
   };
 

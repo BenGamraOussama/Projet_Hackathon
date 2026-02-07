@@ -1,32 +1,99 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/feature/Navbar';
 import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
 import Badge from '../../components/base/Badge';
 import CalendarView from './components/CalendarView';
-import { levelsData, sessionsData, trainingsData } from '../../mocks/trainings';
 import { trainingService } from '../../services/training.service';
-import { studentsData } from '../../mocks/students';
+import { studentService } from '../../services/student.service';
+import { attendanceService } from '../../services/attendance.service';
+import { levelService } from '../../services/level.service';
+import { sessionService } from '../../services/session.service';
 
 type ViewTab = 'list' | 'calendar';
 
 export default function Trainings() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<ViewTab>('list');
   const [trainings, setTrainings] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [levels, setLevels] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [selectedTraining, setSelectedTraining] = useState<number | null>(null);
 
-  useEffect(() => {
-    loadTrainings();
-  }, []);
-
-  const loadTrainings = async () => {
+  const loadTrainings = useCallback(async () => {
     try {
       const data = await trainingService.getAll();
       setTrainings(data);
+      if (!selectedTraining && data.length > 0) {
+        setSelectedTraining(data[0].id);
+      }
     } catch (error) {
       console.error("Failed to load trainings", error);
     }
-  };
-  const [selectedTraining, setSelectedTraining] = useState<number | null>(null);
+  }, [selectedTraining]);
+
+  const loadLevels = useCallback(async () => {
+    try {
+      const data = await levelService.getAll();
+      setLevels(data);
+    } catch (error) {
+      console.error("Failed to load levels", error);
+    }
+  }, []);
+
+  const loadSessions = useCallback(async () => {
+    try {
+      const data = await sessionService.getAll();
+      setSessions(data);
+    } catch (error) {
+      console.error("Failed to load sessions", error);
+    }
+  }, []);
+
+  const loadStudents = useCallback(async () => {
+    try {
+      const data = await studentService.getAll();
+        const normalized = data.map((student) => {
+          const trainingId = student.training?.id ?? student.trainingId ?? null;
+          const totalSessions = student.totalSessions ?? 24;
+          const completedSessions = student.completedSessions ?? 0;
+          const attendanceRate = student.attendanceRate ?? (totalSessions > 0 ? Math.round((completedSessions / totalSessions) * 100) : 0);
+          const eligibleForCertification = student.eligibleForCertification ?? (completedSessions >= totalSessions && attendanceRate >= 80);
+          return {
+            ...student,
+            trainingId,
+            currentLevel: student.currentLevel ?? 1,
+            status: student.status ?? 'active',
+            totalSessions,
+            completedSessions,
+            attendanceRate,
+            eligibleForCertification
+          };
+      });
+      setStudents(normalized);
+    } catch (error) {
+      console.error("Failed to load students", error);
+    }
+  }, []);
+
+  const loadAttendance = useCallback(async () => {
+    try {
+      const data = await attendanceService.getAll();
+      setAttendanceRecords(data);
+    } catch (error) {
+      console.error("Failed to load attendance", error);
+    }
+  }, []);
+  useEffect(() => {
+    loadTrainings();
+    loadStudents();
+    loadAttendance();
+    loadLevels();
+    loadSessions();
+  }, [loadTrainings, loadStudents, loadAttendance, loadLevels, loadSessions]);
   const [expandedLevels, setExpandedLevels] = useState<Record<number, boolean>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -38,7 +105,8 @@ export default function Trainings() {
     description: '',
     startDate: '',
     endDate: '',
-    status: 'upcoming'
+    status: 'upcoming',
+    creationMode: 'AUTO'
   });
   const [editFormData, setEditFormData] = useState({
     name: '',
@@ -66,20 +134,27 @@ export default function Trainings() {
   const assignSearchRef = useRef<HTMLInputElement>(null);
 
   const training = selectedTraining ? trainings.find(t => t.id === selectedTraining) : null;
-  const levels = training ? levelsData.filter(l => l.trainingId === training.id) : [];
+  const levelsForTraining = training
+    ? levels
+        .filter((level) => (level.training?.id ?? level.trainingId) === training.id)
+        .sort((a, b) => Number(a.levelNumber ?? 0) - Number(b.levelNumber ?? 0))
+    : [];
 
   const toggleLevelSessions = (levelId: number) => {
     setExpandedLevels(prev => ({ ...prev, [levelId]: !prev[levelId] }));
   };
 
-  // Initialize session statuses from mock data
+  // Initialize session statuses based on dates
   useEffect(() => {
     const initialStatuses: Record<number, boolean> = {};
-    sessionsData.forEach(session => {
-      initialStatuses[session.id] = session.completed;
+    const today = new Date();
+    sessions.forEach(session => {
+      const rawDate = session.startAt ?? session.date;
+      const sessionDate = rawDate ? new Date(rawDate) : null;
+      initialStatuses[session.id] = sessionDate ? sessionDate < today : false;
     });
     setSessionStatuses(initialStatuses);
-  }, []);
+  }, [sessions]);
 
   const toggleSessionStatus = (sessionId: number) => {
     setSessionStatuses(prev => ({
@@ -93,12 +168,46 @@ export default function Trainings() {
   };
 
   const getSessionsForLevel = (trainingId: number, levelNumber: number) => {
-    return sessionsData.filter(s => s.trainingId === trainingId && s.level === levelNumber);
+    return sessions.filter(s => {
+      const sessionTrainingId = s.training?.id ?? s.trainingId;
+      return sessionTrainingId === trainingId && Number(s.levelNumber) === Number(levelNumber);
+    });
   };
 
   const getCompletedCount = (trainingId: number, levelNumber: number) => {
-    const levelSessions = sessionsData.filter(s => s.trainingId === trainingId && s.level === levelNumber);
+    const levelSessions = sessions.filter(s => {
+      const sessionTrainingId = s.training?.id ?? s.trainingId;
+      return sessionTrainingId === trainingId && Number(s.levelNumber) === Number(levelNumber);
+    });
     return levelSessions.filter(s => sessionStatuses[s.id]).length;
+  };
+
+  const getAttendanceStats = (studentId: number, trainingId?: number | null) => {
+    const records = attendanceRecords.filter((record) => {
+      const recordStudentId = record.student?.id ?? record.studentId;
+      return Number(recordStudentId) === Number(studentId);
+    });
+    const total = records.length;
+    const presentCount = records.filter((record) => record.status === 'present' || record.status === 'late').length;
+    const rate = total > 0 ? Math.round((presentCount / total) * 100) : 0;
+    const trainingSessions = trainingId
+      ? sessions.filter((session) => (session.training?.id ?? session.trainingId) === trainingId).length
+      : 0;
+    const totalSessions = trainingSessions > 0 ? trainingSessions : 24;
+    return { total, rate, totalSessions };
+  };
+
+  const getTrainingEnrolledCount = (trainingId: number) => {
+    return students.filter(s => s.trainingId === trainingId).length;
+  };
+
+  const getTrainingCompletedCount = (trainingId: number) => {
+    return students
+      .filter(s => s.trainingId === trainingId)
+      .filter(s => {
+        const stats = getAttendanceStats(s.id, trainingId);
+        return stats.total >= stats.totalSessions && stats.rate >= 80;
+      }).length;
   };
 
   // Focus management for create modal
@@ -113,7 +222,7 @@ export default function Trainings() {
     return () => {
       if (!isEditModalOpen) document.body.style.overflow = 'unset';
     };
-  }, [isModalOpen]);
+  }, [isModalOpen, isEditModalOpen]);
 
   // Focus management for edit modal
   useEffect(() => {
@@ -127,7 +236,7 @@ export default function Trainings() {
     return () => {
       if (!isModalOpen) document.body.style.overflow = 'unset';
     };
-  }, [isEditModalOpen]);
+  }, [isEditModalOpen, isModalOpen]);
 
   // Focus management for assign modal
   useEffect(() => {
@@ -141,7 +250,7 @@ export default function Trainings() {
     return () => {
       if (!isModalOpen && !isEditModalOpen) document.body.style.overflow = 'unset';
     };
-  }, [isAssignModalOpen]);
+  }, [isAssignModalOpen, isModalOpen, isEditModalOpen]);
 
   // Handle escape key to close modals
   useEffect(() => {
@@ -269,7 +378,8 @@ export default function Trainings() {
       description: '',
       startDate: '',
       endDate: '',
-      status: 'upcoming'
+      status: 'upcoming',
+      creationMode: 'AUTO'
     });
     setFormErrors({});
     setSubmitSuccess(false);
@@ -305,7 +415,7 @@ export default function Trainings() {
   const handleOpenAssignModal = () => {
     if (!training) return;
     // Pre-select students already enrolled in this training
-    const enrolledStudentIds = studentsData
+    const enrolledStudentIds = students
       .filter(s => s.trainingId === training.id)
       .map(s => s.id);
     setSelectedStudents(enrolledStudentIds);
@@ -343,8 +453,18 @@ export default function Trainings() {
   const handleAssignSubmit = async () => {
     setIsAssignSubmitting(true);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      if (training) {
+        await Promise.all(
+          selectedStudents.map((studentId) =>
+            studentService.update(studentId, { training: { id: training.id } })
+          )
+        );
+        await loadStudents();
+      }
+    } catch (error) {
+      console.error("Failed to assign students", error);
+    }
 
     setIsAssignSubmitting(false);
     setAssignSubmitSuccess(true);
@@ -356,7 +476,7 @@ export default function Trainings() {
   };
 
   // Filter students based on search query
-  const filteredStudents = studentsData.filter(student => {
+  const filteredStudents = students.filter(student => {
     const searchLower = assignSearchQuery.toLowerCase();
     const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
     return (
@@ -367,7 +487,7 @@ export default function Trainings() {
 
   // Get students already enrolled in current training
   const getEnrolledStatus = (studentId: number) => {
-    const student = studentsData.find(s => s.id === studentId);
+    const student = students.find(s => s.id === studentId);
     if (!student || !training) return null;
     if (student.trainingId === training.id) return 'enrolled';
     if (student.trainingId) return 'other';
@@ -441,8 +561,24 @@ export default function Trainings() {
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const payload = {
+        title: formData.name,
+        description: formData.description,
+        creationMode: formData.creationMode,
+        levelsCount: 4,
+        sessionsPerLevel: 6,
+        startDate: formData.startDate || null,
+        endDate: formData.endDate || null,
+        status: formData.status
+      };
+      await trainingService.create(payload);
+      await loadTrainings();
+      await loadLevels();
+      await loadSessions();
+    } catch (error) {
+      console.error("Failed to create training", error);
+    }
 
     setIsSubmitting(false);
     setSubmitSuccess(true);
@@ -462,8 +598,16 @@ export default function Trainings() {
 
     setIsEditSubmitting(true);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      if (training) {
+        await trainingService.update(training.id, editFormData);
+        await loadTrainings();
+        await loadLevels();
+        await loadSessions();
+      }
+    } catch (error) {
+      console.error("Failed to update training", error);
+    }
 
     setIsEditSubmitting(false);
     setEditSubmitSuccess(true);
@@ -472,6 +616,18 @@ export default function Trainings() {
     setTimeout(() => {
       handleCloseEditModal();
     }, 2000);
+  };
+
+  const handleGenerateStructure = async () => {
+    if (!training) return;
+    try {
+      await trainingService.generateStructure(training.id);
+      await loadLevels();
+      await loadSessions();
+      await loadTrainings();
+    } catch (error) {
+      console.error("Failed to generate structure", error);
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -530,14 +686,22 @@ export default function Trainings() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestion des Formations</h1>
             <p className="text-base text-gray-600">Créez et gérez les programmes de formation</p>
           </div>
-          <Button
-            variant="primary"
-            icon={<i className="ri-add-line text-xl" aria-hidden="true"></i>}
-            onClick={handleOpenModal}
-            aria-haspopup="dialog"
-          >
-            Créer une formation
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              variant="outline"
+              onClick={() => navigate('/trainings/new')}
+            >
+              Nouveau parcours
+            </Button>
+            <Button
+              variant="primary"
+              icon={<i className="ri-add-line text-xl" aria-hidden="true"></i>}
+              onClick={handleOpenModal}
+              aria-haspopup="dialog"
+            >
+              Créer une formation
+            </Button>
+          </div>
         </div>
 
         {/* View Toggle Tabs */}
@@ -566,7 +730,7 @@ export default function Trainings() {
 
         {/* Calendar View */}
         {activeTab === 'calendar' && (
-          <CalendarView />
+          <CalendarView trainings={trainings} sessions={sessions} />
         )}
 
         {/* List View */}
@@ -598,11 +762,11 @@ export default function Trainings() {
                       <div className="flex items-center gap-4 text-xs text-gray-500">
                         <span className="flex items-center gap-1">
                           <i className="ri-user-line" aria-hidden="true"></i>
-                          {t.enrolledStudents}
+                          {getTrainingEnrolledCount(t.id)}
                         </span>
                         <span className="flex items-center gap-1">
                           <i className="ri-checkbox-circle-line" aria-hidden="true"></i>
-                          {t.completedStudents}
+                          {getTrainingCompletedCount(t.id)}
                         </span>
                       </div>
                     </button>
@@ -625,12 +789,16 @@ export default function Trainings() {
                             {new Date(training.startDate).toLocaleDateString('fr-FR')} - {new Date(training.endDate).toLocaleDateString('fr-FR')}
                           </span>
                           <span className="flex items-center gap-2">
+                            <i className="ri-settings-3-line" aria-hidden="true"></i>
+                            {training.creationMode === 'AUTO' ? 'Auto' : 'Manual'}
+                          </span>
+                          <span className="flex items-center gap-2">
                             <i className="ri-user-line" aria-hidden="true"></i>
-                            {training.enrolledStudents} inscrits
+                            {getTrainingEnrolledCount(training.id)} inscrits
                           </span>
                           <span className="flex items-center gap-2">
                             <i className="ri-award-line" aria-hidden="true"></i>
-                            {training.completedStudents} terminés
+                            {getTrainingCompletedCount(training.id)} terminés
                           </span>
                         </div>
                       </div>
@@ -641,6 +809,14 @@ export default function Trainings() {
 
                     <div className="flex gap-3">
                       <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate(`/trainings/${training.id}`)}
+                      >
+                        <i className="ri-external-link-line" aria-hidden="true"></i>
+                        Voir la fiche
+                      </Button>
+                      <Button
                         variant="primary"
                         size="sm"
                         onClick={handleOpenEditModal}
@@ -649,6 +825,16 @@ export default function Trainings() {
                         <i className="ri-edit-line" aria-hidden="true"></i>
                         Modifier
                       </Button>
+                      {training.creationMode === 'AUTO' && (training.structureStatus !== 'GENERATED') && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleGenerateStructure}
+                        >
+                          <i className="ri-magic-line" aria-hidden="true"></i>
+                          Generer la structure
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -664,10 +850,14 @@ export default function Trainings() {
                   <Card>
                     <h3 className="text-xl font-semibold text-gray-900 mb-6">Niveaux de formation</h3>
                     <div className="space-y-4">
-                      {levels.map((level) => {
-                        const levelSessions = getSessionsForLevel(training.id, level.levelNumber);
+                      {levelsForTraining.map((level) => {
+                        const levelSessions = getSessionsForLevel(training.id, level.levelNumber)
+                          .sort((a: any, b: any) => Number(a.sessionNumber ?? 0) - Number(b.sessionNumber ?? 0));
                         const completedCount = getCompletedCount(training.id, level.levelNumber);
-                        const progressPercent = Math.round((completedCount / level.totalSessions) * 100);
+                        const totalSessions = levelSessions.length > 0 ? levelSessions.length : 6;
+                        const progressPercent = totalSessions > 0
+                          ? Math.round((completedCount / totalSessions) * 100)
+                          : 0;
                         const isExpanded = expandedLevels[level.id] || false;
 
                         return (
@@ -686,14 +876,14 @@ export default function Trainings() {
                                 </div>
                               </div>
                               <Badge variant="info" size="sm">
-                                {level.totalSessions} sessions
+                                {totalSessions} sessions
                               </Badge>
                             </div>
 
                             <div className="mt-4 pt-4 border-t border-teal-200">
                               <div className="flex items-center justify-between text-sm">
                                 <span className="text-gray-600">Progression des sessions</span>
-                                <span className="font-medium text-gray-900">{completedCount}/{level.totalSessions} terminées</span>
+                                <span className="font-medium text-gray-900">{completedCount}/{totalSessions} terminées</span>
                               </div>
                               <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                                 <div
@@ -731,8 +921,9 @@ export default function Trainings() {
                               >
                                 <div className="space-y-2">
                                   {levelSessions.map((session) => {
-                                    const sessionDate = new Date(session.date);
-                                    const isPast = sessionDate < new Date();
+                                    const rawDate = session.startAt ?? session.date;
+                                    const sessionDate = rawDate ? new Date(rawDate) : null;
+                                    const isPast = sessionDate ? sessionDate < new Date() : false;
                                     const isCompleted = sessionStatuses[session.id];
 
                                     return (
@@ -774,7 +965,7 @@ export default function Trainings() {
                                             </span>
                                             <span className="text-xs text-gray-500 flex items-center gap-1">
                                               <i className="ri-time-line" aria-hidden="true"></i>
-                                              {session.duration} min
+                                              {session.durationMin ?? session.duration ?? 120} min
                                             </span>
                                           </div>
                                         </div>
@@ -1014,6 +1205,29 @@ export default function Trainings() {
 
                       <div>
                         <label
+                          htmlFor="creationMode"
+                          className="block text-sm font-medium text-gray-700 mb-1.5"
+                        >
+                          Creation Mode
+                        </label>
+                        <div className="relative">
+                          <i className="ri-settings-3-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true"></i>
+                          <select
+                            id="creationMode"
+                            name="creationMode"
+                            value={formData.creationMode}
+                            onChange={handleInputChange}
+                            className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors appearance-none bg-white cursor-pointer"
+                          >
+                            <option value="AUTO">Auto (generate structure)</option>
+                            <option value="MANUAL">Manual (create levels/sessions)</option>
+                          </select>
+                          <i className="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" aria-hidden="true"></i>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label
                           htmlFor="status"
                           className="block text-sm font-medium text-gray-700 mb-1.5"
                         >
@@ -1039,7 +1253,7 @@ export default function Trainings() {
                         <i className="ri-information-line text-teal-600 text-xl flex-shrink-0 mt-0.5" aria-hidden="true"></i>
                         <div className="text-sm text-teal-800">
                           <p className="font-medium mb-1">Training Structure</p>
-                          <p>Each training will automatically include 4 levels with 6 sessions per level (24 total sessions). You can customize session details after creation.</p>
+                          <p>Auto mode uses the structure generator (4 levels, 6 sessions per level). Manual mode lets you create levels and sessions yourself.</p>
                         </div>
                       </div>
                     </>
@@ -1429,7 +1643,7 @@ export default function Trainings() {
                             const isSelected = selectedStudents.includes(student.id);
                             const enrolledStatus = getEnrolledStatus(student.id);
                             const enrolledTraining = student.trainingId
-                              ? trainingsData.find(t => t.id === student.trainingId)
+                              ? trainings.find(t => t.id === student.trainingId)
                               : null;
 
                             return (
@@ -1447,7 +1661,7 @@ export default function Trainings() {
                                 />
 
                                 <div className="w-10 h-10 flex items-center justify-center bg-gradient-to-br from-teal-500 to-teal-600 text-white rounded-full font-semibold text-sm flex-shrink-0">
-                                  {student.firstName[0]}{student.lastName[0]}
+                                  {(student.firstName?.[0] || '?')}{(student.lastName?.[0] || '')}
                                 </div>
 
                                 <div className="flex-1 min-w-0">
@@ -1478,7 +1692,9 @@ export default function Trainings() {
 
                                 <div className="flex-shrink-0 text-right hidden sm:block">
                                   <p className="text-xs text-gray-500">Level {student.currentLevel}</p>
-                                  <p className="text-xs text-gray-400">{student.attendanceRate}% attendance</p>
+                                  <p className="text-xs text-gray-400">
+                                    {getAttendanceStats(student.id, student.trainingId).rate}% attendance
+                                  </p>
                                 </div>
                               </label>
                             );

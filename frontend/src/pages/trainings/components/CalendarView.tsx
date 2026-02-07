@@ -2,7 +2,6 @@
 import { useState, useMemo } from 'react';
 import Badge from '../../../components/base/Badge';
 import Button from '../../../components/base/Button';
-import { sessionsData, trainingsData } from '../../../mocks/trainings';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -26,22 +25,39 @@ const trainingColors: Record<number, { bg: string; border: string; text: string 
   4: { bg: 'bg-indigo-100', border: 'border-l-indigo-600', text: 'text-indigo-700' },
 };
 
-export default function CalendarView() {
-  const [currentDate, setCurrentDate] = useState(new Date(2024, 1, 1)); // February 2024
+const fallbackColors = { bg: 'bg-gray-100', border: 'border-l-gray-400', text: 'text-gray-700' };
+const getTrainingColors = (trainingId?: number | null) => {
+  if (!trainingId) return fallbackColors;
+  return trainingColors[trainingId] || fallbackColors;
+};
+
+export default function CalendarView({ trainings = [], sessions = [] }: { trainings: any[]; sessions?: any[] }) {
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [selectedSession, setSelectedSession] = useState<CalendarSession | null>(null);
   const [filterTraining, setFilterTraining] = useState<number | null>(null);
 
   const allSessions: CalendarSession[] = useMemo(() => {
-    return sessionsData.map(session => {
-      const training = trainingsData.find(t => t.id === session.trainingId);
+    return sessions.map((session: any) => {
+      const trainingId = session.training?.id ?? session.trainingId;
+      const training = trainings.find(t => t.id === trainingId);
+      const rawDate = session.startAt ?? session.date;
+      const sessionDate = rawDate ? new Date(rawDate) : null;
+      const completed = sessionDate ? sessionDate < new Date() : false;
       return {
-        ...session,
+        id: session.id,
+        trainingId,
+        level: session.levelNumber ?? session.level ?? 1,
+        sessionNumber: session.sessionNumber ?? 1,
+        title: session.title ?? `Session ${session.sessionNumber ?? session.id}`,
+        date: sessionDate ? sessionDate.toISOString().split('T')[0] : '',
+        duration: session.durationMin ?? session.duration ?? 120,
+        completed,
         trainingName: training?.name || 'Unknown Training',
-        trainingColor: trainingColors[session.trainingId]?.bg || 'bg-gray-100',
+        trainingColor: getTrainingColors(trainingId).bg,
       };
     });
-  }, []);
+  }, [trainings, sessions]);
 
   const filteredSessions = useMemo(() => {
     if (filterTraining === null) return allSessions;
@@ -136,11 +152,11 @@ export default function CalendarView() {
   };
 
   const goToToday = () => {
-    setCurrentDate(new Date(2024, 1, 15)); // Mock "today" for demo
+    setCurrentDate(new Date());
   };
 
   const isToday = (date: Date) => {
-    const today = new Date(2024, 1, 15); // Mock today
+    const today = new Date();
     return date.toDateString() === today.toDateString();
   };
 
@@ -187,7 +203,7 @@ export default function CalendarView() {
                 
                 <div className="space-y-1">
                   {displaySessions.map(session => {
-                    const colors = trainingColors[session.trainingId] || { bg: 'bg-gray-100', border: 'border-l-gray-400', text: 'text-gray-700' };
+                    const colors = getTrainingColors(session.trainingId);
                     return (
                       <button
                         key={session.id}
@@ -271,7 +287,7 @@ export default function CalendarView() {
                     }`}
                   >
                     {hourSessions.map(session => {
-                      const colors = trainingColors[session.trainingId] || { bg: 'bg-gray-100', border: 'border-l-gray-400', text: 'text-gray-700' };
+                      const colors = getTrainingColors(session.trainingId);
                       return (
                         <button
                           key={session.id}
@@ -320,7 +336,7 @@ export default function CalendarView() {
             </div>
           ) : (
             sessions.map(session => {
-              const colors = trainingColors[session.trainingId] || { bg: 'bg-gray-100', border: 'border-l-gray-400', text: 'text-gray-700' };
+              const colors = getTrainingColors(session.trainingId);
               const sessionHour = 8 + (session.sessionNumber - 1) * 2;
               
               return (
@@ -371,7 +387,7 @@ export default function CalendarView() {
 
   // Statistics
   const stats = useMemo(() => {
-    const now = new Date(2024, 1, 15);
+    const now = new Date();
     const thisMonth = filteredSessions.filter(s => {
       const d = new Date(s.date);
       return d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
@@ -423,8 +439,8 @@ export default function CalendarView() {
           >
             Toutes
           </button>
-          {trainingsData.map(training => {
-            const colors = trainingColors[training.id];
+          {trainings.map(training => {
+            const colors = getTrainingColors(training.id);
             return (
               <button
                 key={training.id}
@@ -524,8 +540,8 @@ export default function CalendarView() {
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-4 text-sm">
         <span className="text-gray-500 font-medium">Légende :</span>
-        {trainingsData.map(training => {
-          const colors = trainingColors[training.id];
+        {trainings.map(training => {
+          const colors = getTrainingColors(training.id);
           return (
             <div key={training.id} className="flex items-center gap-2">
               <span className={`w-3 h-3 rounded ${colors.border.replace('border-l-', 'bg-')}`}></span>
@@ -552,7 +568,7 @@ export default function CalendarView() {
           <div className="flex min-h-full items-center justify-center p-4">
             <div className="relative w-full max-w-lg bg-white rounded-xl shadow-xl transform transition-all">
               {/* Color bar */}
-              <div className={`h-2 rounded-t-xl ${trainingColors[selectedSession.trainingId]?.border.replace('border-l-', 'bg-') || 'bg-gray-400'}`}></div>
+              <div className={`h-2 rounded-t-xl ${getTrainingColors(selectedSession.trainingId).border.replace('border-l-', 'bg-')}`}></div>
               
               {/* Header */}
               <div className="flex items-start justify-between px-6 py-4 border-b border-gray-200">

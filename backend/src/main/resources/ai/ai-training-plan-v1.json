@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astba.local/schemas/ai-training-plan-v1.json",
+  "title": "ASTBA AI Training Plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "language", "training", "levels"],
+  "properties": {
+    "version": { "type": "string", "const": "v1" },
+    "language": { "type": "string", "enum": ["fr", "ar", "en"] },
+    "training": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "description"],
+      "properties": {
+        "title": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "description": { "type": "string", "minLength": 0, "maxLength": 800 }
+      }
+    },
+    "globalConstraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "levelsCount": { "type": "integer", "const": 4 },
+        "sessionsPerLevel": { "type": "integer", "const": 6 },
+        "defaultDurationMin": { "type": ["integer", "null"], "minimum": 30, "maximum": 240 },
+        "defaultLocation": { "type": ["string", "null"], "maxLength": 120 },
+        "startDate": { "type": ["string", "null"], "format": "date" },
+        "preferredDays": {
+          "type": ["array", "null"],
+          "items": { "type": "string", "enum": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"] },
+          "minItems": 1,
+          "maxItems": 7
+        }
+      }
+    },
+    "levels": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["levelIndex", "title", "outcomes", "sessions"],
+        "properties": {
+          "levelIndex": { "type": "integer", "minimum": 1, "maximum": 4 },
+          "title": { "type": "string", "minLength": 3, "maxLength": 120 },
+          "outcomes": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 6,
+            "items": { "type": "string", "minLength": 3, "maxLength": 140 }
+          },
+          "sessions": {
+            "type": "array",
+            "minItems": 6,
+            "maxItems": 6,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["sessionIndex", "title", "objective", "durationMin", "modality", "accessibilityNotes"],
+              "properties": {
+                "sessionIndex": { "type": "integer", "minimum": 1, "maximum": 6 },
+                "title": { "type": "string", "minLength": 3, "maxLength": 120 },
+                "objective": { "type": "string", "minLength": 5, "maxLength": 220 },
+                "durationMin": { "type": "integer", "minimum": 30, "maximum": 240 },
+                "startAt": { "type": ["string", "null"], "format": "date-time" },
+                "location": { "type": ["string", "null"], "maxLength": 120 },
+                "modality": { "type": "string", "enum": ["IN_PERSON"] },
+                "materials": {
+                  "type": "array",
+                  "minItems": 0,
+                  "maxItems": 10,
+                  "items": { "type": "string", "minLength": 2, "maxLength": 120 }
+                },
+                "accessibilityNotes": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 8,
+                  "items": { "type": "string", "minLength": 4, "maxLength": 160 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

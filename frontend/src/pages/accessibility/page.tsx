@@ -5,6 +5,7 @@ import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
 import Badge from '../../components/base/Badge';
 import { studentsData } from '../../mocks/students';
+import { preferenceService } from '../../services/preference.service';
 
 interface AccessibilitySettings {
   fontSize: string;
@@ -15,6 +16,7 @@ interface AccessibilitySettings {
   lineSpacing: string;
   cursorSize: string;
   colorBlindMode: string;
+  simplifyUi: boolean;
 }
 
 interface StudentAccommodation {
@@ -34,7 +36,8 @@ const defaultSettings: AccessibilitySettings = {
   focusHighlight: true,
   lineSpacing: 'normal',
   cursorSize: 'normal',
-  colorBlindMode: 'none'
+  colorBlindMode: 'none',
+  simplifyUi: false
 };
 
 export default function Accessibility() {
@@ -59,27 +62,6 @@ export default function Accessibility() {
   
   // Preview mode
   const [previewMode, setPreviewMode] = useState(false);
-
-  // Load settings from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem('accessibilitySettings');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      setSettings(parsed);
-      setSavedSettings(parsed);
-      applySettingsToDOM(parsed);
-    }
-    
-    const storedAccommodations = localStorage.getItem('studentAccommodations');
-    if (storedAccommodations) {
-      setAccommodations(JSON.parse(storedAccommodations));
-    }
-  }, []);
-
-  // Check for changes
-  useEffect(() => {
-    setHasChanges(JSON.stringify(settings) !== JSON.stringify(savedSettings));
-  }, [settings, savedSettings]);
 
   const applySettingsToDOM = useCallback((s: AccessibilitySettings) => {
     const root = document.documentElement;
@@ -129,7 +111,51 @@ export default function Accessibility() {
     if (s.colorBlindMode !== 'none') {
       root.classList.add(s.colorBlindMode);
     }
+
+    // Simplify UI
+    root.classList.toggle('simplify-ui', s.simplifyUi);
   }, []);
+
+  // Load settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      let initialSettings = defaultSettings;
+      let loadedFromRemote = false;
+
+      try {
+        const remote = await preferenceService.get();
+        if (remote) {
+          initialSettings = { ...defaultSettings, ...remote };
+          loadedFromRemote = true;
+        }
+      } catch (error) {
+        console.error('Failed to load preferences', error);
+      }
+
+      if (!loadedFromRemote) {
+        const stored = localStorage.getItem('accessibilitySettings');
+        if (stored) {
+          initialSettings = { ...defaultSettings, ...JSON.parse(stored) };
+        }
+      }
+
+      setSettings(initialSettings);
+      setSavedSettings(initialSettings);
+      applySettingsToDOM(initialSettings);
+
+      const storedAccommodations = localStorage.getItem('studentAccommodations');
+      if (storedAccommodations) {
+        setAccommodations(JSON.parse(storedAccommodations));
+      }
+    };
+
+    loadSettings();
+  }, [applySettingsToDOM]);
+
+  // Check for changes
+  useEffect(() => {
+    setHasChanges(JSON.stringify(settings) !== JSON.stringify(savedSettings));
+  }, [settings, savedSettings]);
 
   const showNotification = (message: string, type: 'success' | 'info' = 'success') => {
     setToastMessage(message);
@@ -138,21 +164,32 @@ export default function Accessibility() {
     setTimeout(() => setShowToast(false), 3000);
   };
 
-  const handleSaveSettings = () => {
-    localStorage.setItem('accessibilitySettings', JSON.stringify(settings));
-    setSavedSettings(settings);
-    applySettingsToDOM(settings);
-    setPreviewMode(false);
-    showNotification('Paramètres sauvegardés avec succès !');
+  const handleSaveSettings = async () => {
+    try {
+      await preferenceService.update(settings);
+      localStorage.setItem('accessibilitySettings', JSON.stringify(settings));
+      setSavedSettings(settings);
+      applySettingsToDOM(settings);
+      setPreviewMode(false);
+      showNotification('Param??tres sauvegard??s avec succ??s !');
+    } catch (error) {
+      console.error('Failed to save preferences', error);
+      showNotification('Echec de sauvegarde des param??tres', 'info');
+    }
   };
 
-  const handleResetSettings = () => {
+  const handleResetSettings = async () => {
+    try {
+      await preferenceService.update(defaultSettings);
+    } catch (error) {
+      console.error('Failed to reset preferences', error);
+    }
     setSettings(defaultSettings);
     localStorage.setItem('accessibilitySettings', JSON.stringify(defaultSettings));
     setSavedSettings(defaultSettings);
     applySettingsToDOM(defaultSettings);
     setPreviewMode(false);
-    showNotification('Paramètres réinitialisés par défaut', 'info');
+    showNotification('Param??tres r??initialis??s par d??faut', 'info');
   };
 
   const handlePreviewToggle = () => {
@@ -515,6 +552,34 @@ export default function Accessibility() {
                   </button>
                 </div>
                 
+                {/* Simplify UI Toggle */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 flex items-center justify-center bg-slate-100 rounded-lg">
+                      <i className="ri-layout-3-line text-xl text-slate-600" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">Interface Simplifiee</p>
+                      <p className="text-sm text-gray-600">Masquer les elements visuels non essentiels</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateSetting('simplifyUi', !settings.simplifyUi)}
+                    className={`relative w-14 h-8 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer ${
+                      settings.simplifyUi ? 'bg-teal-600' : 'bg-gray-300'
+                    }`}
+                    role="switch"
+                    aria-checked={settings.simplifyUi}
+                    aria-label="Activer l'interface simplifiee"
+                  >
+                    <span
+                      className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
+                        settings.simplifyUi ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    ></span>
+                  </button>
+                </div>
+
                 {/* Large Cursor Toggle */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
@@ -678,7 +743,7 @@ export default function Accessibility() {
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 flex items-center justify-center bg-teal-600 text-white rounded-full text-xs font-bold">
-                          {s.firstName[0]}{s.lastName[0]}
+                        {(s.firstName?.[0] || '?')}{(s.lastName?.[0] || '')}
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-900">{s.firstName} {s.lastName}</p>
@@ -718,7 +783,7 @@ export default function Accessibility() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 flex items-center justify-center bg-teal-600 text-white rounded-full font-bold">
-                    {student.firstName[0]}{student.lastName[0]}
+                    {(student.firstName?.[0] || '?')}{(student.lastName?.[0] || '')}
                   </div>
                   <div>
                     <h2 id="accommodation-modal-title" className="text-xl font-bold text-gray-900">

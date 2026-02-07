@@ -6,12 +6,18 @@ import Login from "../pages/login/page";
 import Students from "../pages/students/page";
 import StudentDetail from "../pages/students/[id]/page";
 import Trainings from "../pages/trainings/page";
+import TrainingCreatePage from "../pages/trainings/new/page";
+import TrainingDetailPage from "../pages/trainings/[id]/page";
 import Attendance from "../pages/attendance/page";
 import Certification from "../pages/certification/page";
 import Accessibility from "../pages/accessibility/page";
 import Profile from "../pages/profile/page";
 import Messages from "../pages/messages/page";
 import ConversationDetail from "../pages/messages/[id]/page";
+import Users from "../pages/users/page";
+import Reports from "../pages/reports/page";
+import AuditLogs from "../pages/audit/page";
+import { RequireAuth, RequireRole } from "./guards";
 
 const routes: RouteObject[] = [
   {
@@ -20,7 +26,11 @@ const routes: RouteObject[] = [
   },
   {
     path: "/dashboard",
-    element: <Dashboard />,
+    element: (
+      <RequireAuth>
+        <Dashboard />
+      </RequireAuth>
+    ),
   },
   {
     path: "/login",
@@ -28,39 +38,115 @@ const routes: RouteObject[] = [
   },
   {
     path: "/students",
-    element: <Students />,
+    element: (
+      <RequireAuth>
+        <Students />
+      </RequireAuth>
+    ),
   },
   {
     path: "/students/:id",
-    element: <StudentDetail />,
+    element: (
+      <RequireAuth>
+        <StudentDetail />
+      </RequireAuth>
+    ),
   },
   {
     path: "/trainings",
-    element: <Trainings />,
+    element: (
+      <RequireRole roles={["ADMIN", "RESPONSABLE"]}>
+        <Trainings />
+      </RequireRole>
+    ),
+  },
+  {
+    path: "/trainings/new",
+    element: (
+      <RequireRole roles={["ADMIN", "RESPONSABLE"]}>
+        <TrainingCreatePage />
+      </RequireRole>
+    ),
+  },
+  {
+    path: "/trainings/:id",
+    element: (
+      <RequireRole roles={["ADMIN", "RESPONSABLE", "FORMATEUR"]}>
+        <TrainingDetailPage />
+      </RequireRole>
+    ),
   },
   {
     path: "/attendance",
-    element: <Attendance />,
+    element: (
+      <RequireAuth>
+        <Attendance />
+      </RequireAuth>
+    ),
   },
   {
     path: "/certification",
-    element: <Certification />,
+    element: (
+      <RequireRole roles={["ADMIN", "RESPONSABLE"]}>
+        <Certification />
+      </RequireRole>
+    ),
+  },
+  {
+    path: "/users",
+    element: (
+      <RequireRole role="ADMIN">
+        <Users />
+      </RequireRole>
+    ),
+  },
+  {
+    path: "/reports",
+    element: (
+      <RequireRole roles={["ADMIN", "RESPONSABLE"]}>
+        <Reports />
+      </RequireRole>
+    ),
+  },
+  {
+    path: "/audit-logs",
+    element: (
+      <RequireRole role="ADMIN">
+        <AuditLogs />
+      </RequireRole>
+    ),
   },
   {
     path: "/accessibility",
-    element: <Accessibility />,
+    element: (
+      <RequireAuth>
+        <Accessibility />
+      </RequireAuth>
+    ),
   },
   {
     path: "/profile",
-    element: <Profile />,
+    element: (
+      <RequireAuth>
+        <Profile />
+      </RequireAuth>
+    ),
   },
   {
     path: "/messages",
-    element: <Messages />,
+    element: (
+      <RequireAuth>
+        <Messages />
+      </RequireAuth>
+    ),
   },
   {
     path: "/messages/:id",
-    element: <ConversationDetail />,
+    element: (
+      <RequireAuth>
+        <ConversationDetail />
+      </RequireAuth>
+    ),
   },
   {
     path: "*",

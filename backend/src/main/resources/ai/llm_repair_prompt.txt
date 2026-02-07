@@ -1,0 +1,8 @@
+Your previous output did not pass JSON Schema validation.
+Fix the JSON to conform EXACTLY to the schema:
+- output JSON only
+- no extra keys
+- exactly 4 levels and 6 sessions per level
+Return corrected JSON.
+
+The user message will provide validation errors and the previous JSON.

@@ -6,6 +6,12 @@ import java.time.LocalDate;
 
 @Entity
 @Data
+@Table(
+        name = "attendance",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = { "student_id", "session_id" })
+        }
+)
 public class Attendance {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

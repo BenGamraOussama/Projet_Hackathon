@@ -1,6 +1,5 @@
 
 import Card from '../../../components/base/Card';
-import Badge from '../../../components/base/Badge';
 
 interface NotificationSettings {
   email: boolean;

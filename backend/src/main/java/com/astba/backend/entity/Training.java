@@ -17,4 +17,12 @@ public class Training {
     private LocalDate startDate;
     private LocalDate endDate;
     private String status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TrainingCreationMode creationMode = TrainingCreationMode.AUTO;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TrainingStructureStatus structureStatus = TrainingStructureStatus.NOT_GENERATED;
 }

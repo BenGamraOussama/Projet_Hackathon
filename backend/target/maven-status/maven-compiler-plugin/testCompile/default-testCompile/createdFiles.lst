@@ -1,0 +1,5 @@
+com\astba\backend\TrainingStructureControllerTest.class
+com\astba\backend\AiTrainingPlanSecurityTest.class
+com\astba\backend\FlywayMigrationTest.class
+com\astba\backend\AiTrainingPlanControllerTest.class
+com\astba\backend\SecurityRbacTest.class

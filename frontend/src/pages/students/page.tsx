@@ -5,7 +5,7 @@ import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
 import Badge from '../../components/base/Badge';
 import { studentService } from '../../services/student.service';
-import { trainingsData } from '../../mocks/trainings'; // Keep for now as lookup, or replace if trainingService is used for dropdown
+import { trainingService } from '../../services/training.service';
 
 export default function Students() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,18 +22,52 @@ export default function Students() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [students, setStudents] = useState<any[]>([]);
+  const [trainings, setTrainings] = useState<any[]>([]);
 
   useEffect(() => {
     loadStudents();
+    loadTrainings();
   }, []);
 
   const loadStudents = async () => {
     try {
-      const data = await studentService.getAll();
-      setStudents(data);
+      const data = await studentService.getProgressAll();
+      const normalized = data.map((student) => ({
+        id: student.studentId ?? student.id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        email: student.email,
+        phone: student.phone,
+        enrollmentDate: student.enrollmentDate,
+        status: student.status ?? 'active',
+        currentLevel: student.currentLevel ?? 1,
+        trainingId: student.trainingId ?? null,
+        trainingName: student.trainingName ?? '',
+        totalSessions: student.totalSessions ?? 0,
+        completedSessions: student.completedSessions ?? 0,
+        attendanceRate: student.attendanceRate ?? 0,
+        eligibleForCertification: student.eligibleForCertification ?? false
+      }));
+      setStudents(normalized);
     } catch (error) {
       console.error("Failed to fetch students", error);
     }
+  };
+
+  const loadTrainings = async () => {
+    try {
+      const data = await trainingService.getAll();
+      setTrainings(data);
+    } catch (error) {
+      console.error("Failed to fetch trainings", error);
+    }
+  };
+
+  const getAttendanceStats = (student: any) => {
+    const completedSessions = student.completedSessions ?? 0;
+    const totalSessions = student.totalSessions ?? 0;
+    const rate = student.attendanceRate ?? 0;
+    return { total: completedSessions, rate, completedSessions, totalSessions };
   };
 
   const modalRef = useRef<HTMLDivElement>(null);
@@ -47,7 +81,7 @@ export default function Students() {
   });
 
   const getTrainingName = (trainingId: number) => {
-    return trainingsData.find(t => t.id === trainingId)?.name || 'Unknown';
+    return trainings.find(t => t.id === trainingId)?.name || 'Unknown';
   };
 
   // Focus management for modal
@@ -168,7 +202,11 @@ export default function Students() {
 
     // Simulate API call
     try {
-      await studentService.create(formData);
+      const payload = {
+        ...formData,
+        training: formData.trainingId ? { id: Number(formData.trainingId) } : null
+      };
+      await studentService.create(payload);
       loadStudents();
       setSubmitSuccess(true);
       // Close modal after success message
@@ -269,7 +307,7 @@ export default function Students() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 flex items-center justify-center bg-teal-100 text-teal-700 rounded-full font-semibold">
-                            {student.firstName[0]}{student.lastName[0]}
+                            {(student.firstName?.[0] || '?')}{(student.lastName?.[0] || '')}
                           </div>
                           <div>
                             <p className="font-medium text-gray-900">{student.firstName} {student.lastName}</p>
@@ -282,37 +320,56 @@ export default function Students() {
                         <p className="text-sm text-gray-500">{student.phone}</p>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-sm text-gray-900">{getTrainingName(student.trainingId)}</p>
+                        <p className="text-sm text-gray-900">{student.trainingName || getTrainingName(student.trainingId)}</p>
                         <p className="text-sm text-gray-500">Level {student.currentLevel}</p>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
-                          <div
-                            className="bg-teal-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(student.completedSessions / student.totalSessions) * 100}%` }}
-                            role="progressbar"
-                            aria-valuenow={(student.completedSessions / student.totalSessions) * 100}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-label={`Progress: ${student.completedSessions} of ${student.totalSessions} sessions completed`}
-                          ></div>
-                        </div>
-                        <p className="text-xs text-gray-600">{student.completedSessions}/{student.totalSessions} sessions</p>
+                        {(() => {
+                          const stats = getAttendanceStats(student);
+                          const progress = stats.totalSessions > 0
+                            ? Math.round((stats.completedSessions / stats.totalSessions) * 100)
+                            : 0;
+                          return (
+                            <>
+                              <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                                <div
+                                  className="bg-teal-600 h-2 rounded-full transition-all duration-300"
+                                  style={{ width: `${progress}%` }}
+                                  role="progressbar"
+                                  aria-valuenow={progress}
+                                  aria-valuemin={0}
+                                  aria-valuemax={100}
+                                  aria-label={`Progress: ${stats.completedSessions} of ${stats.totalSessions} sessions completed`}
+                                ></div>
+                              </div>
+                              <p className="text-xs text-gray-600">{stats.completedSessions}/{stats.totalSessions} sessions</p>
+                            </>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4">
-                        <Badge variant={student.attendanceRate >= 90 ? 'success' : student.attendanceRate >= 75 ? 'warning' : 'danger'}>
-                          {student.attendanceRate}%
-                        </Badge>
+                        {(() => {
+                          const stats = getAttendanceStats(student);
+                          return (
+                            <Badge variant={stats.rate >= 90 ? 'success' : stats.rate >= 75 ? 'warning' : 'danger'}>
+                              {stats.rate}%
+                            </Badge>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4">
-                        {student.eligibleForCertification ? (
-                          <Badge variant="success">
-                            <i className="ri-award-line mr-1" aria-hidden="true"></i>
-                            Eligible
-                          </Badge>
-                        ) : (
-                          <Badge variant="info">In Progress</Badge>
-                        )}
+                        {(() => {
+                          const stats = getAttendanceStats(student);
+                          const isEligible = stats.completedSessions >= stats.totalSessions && stats.rate >= 80;
+                          return isEligible ? (
+                            <Badge variant="success">
+                              <i className="ri-award-line mr-1" aria-hidden="true"></i>
+                              Eligible
+                            </Badge>
+                          ) : (
+                            <Badge variant="info">In Progress</Badge>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Link
@@ -336,49 +393,68 @@ export default function Students() {
             <Card key={student.id} hover>
               <div className="flex items-start gap-4 mb-4">
                 <div className="w-12 h-12 flex items-center justify-center bg-teal-100 text-teal-700 rounded-full font-semibold text-lg">
-                  {student.firstName[0]}{student.lastName[0]}
+                  {(student.firstName?.[0] || '?')}{(student.lastName?.[0] || '')}
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-gray-900 mb-1">{student.firstName} {student.lastName}</h3>
                   <p className="text-sm text-gray-600">{student.email}</p>
                   <p className="text-sm text-gray-500">{student.phone}</p>
                 </div>
-                {student.eligibleForCertification && (
-                  <Badge variant="success" size="sm">
-                    <i className="ri-award-line" aria-hidden="true"></i>
-                  </Badge>
-                )}
+                {(() => {
+                  const stats = getAttendanceStats(student);
+                  const isEligible = stats.completedSessions >= stats.totalSessions && stats.rate >= 80;
+                  return isEligible ? (
+                    <Badge variant="success" size="sm">
+                      <i className="ri-award-line" aria-hidden="true"></i>
+                    </Badge>
+                  ) : null;
+                })()}
               </div>
 
               <div className="space-y-3 mb-4">
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Training</p>
-                  <p className="text-sm font-medium text-gray-900">{getTrainingName(student.trainingId)} - Level {student.currentLevel}</p>
+                  <p className="text-sm font-medium text-gray-900">{student.trainingName || getTrainingName(student.trainingId)} - Level {student.currentLevel}</p>
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs text-gray-500">Progress</p>
-                    <p className="text-xs text-gray-600">{student.completedSessions}/{student.totalSessions}</p>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-teal-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${(student.completedSessions / student.totalSessions) * 100}%` }}
-                      role="progressbar"
-                      aria-valuenow={(student.completedSessions / student.totalSessions) * 100}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-label={`Progress: ${student.completedSessions} of ${student.totalSessions} sessions completed`}
-                    ></div>
-                  </div>
+                  {(() => {
+                    const stats = getAttendanceStats(student);
+                    const progress = stats.totalSessions > 0
+                      ? Math.round((stats.completedSessions / stats.totalSessions) * 100)
+                      : 0;
+                    return (
+                      <>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs text-gray-500">Progress</p>
+                          <p className="text-xs text-gray-600">{stats.completedSessions}/{stats.totalSessions}</p>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-teal-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${progress}%` }}
+                            role="progressbar"
+                            aria-valuenow={progress}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-label={`Progress: ${stats.completedSessions} of ${stats.totalSessions} sessions completed`}
+                          ></div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-gray-500">Attendance Rate</p>
-                  <Badge variant={student.attendanceRate >= 90 ? 'success' : student.attendanceRate >= 75 ? 'warning' : 'danger'} size="sm">
-                    {student.attendanceRate}%
-                  </Badge>
+                  {(() => {
+                    const stats = getAttendanceStats(student);
+                    return (
+                      <Badge variant={stats.rate >= 90 ? 'success' : stats.rate >= 75 ? 'warning' : 'danger'} size="sm">
+                        {stats.rate}%
+                      </Badge>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -602,7 +678,7 @@ export default function Students() {
                             aria-describedby={formErrors.trainingId ? 'trainingId-error' : undefined}
                           >
                             <option value="">Select a training program</option>
-                            {trainingsData.filter(t => t.status === 'active' || t.status === 'upcoming').map(training => (
+                            {trainings.filter(t => t.status === 'active' || t.status === 'upcoming').map(training => (
                               <option key={training.id} value={training.id}>
                                 {training.name} ({training.status === 'upcoming' ? 'Upcoming' : 'Active'})
                               </option>

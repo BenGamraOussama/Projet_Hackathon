@@ -1,0 +1,10 @@
+llm:
+  provider: mistral
+  mistral:
+    base-url: https://api.mistral.ai
+    api-key: ${MISTRAL_API_KEY}
+    model: mistral-large-latest
+    timeout-ms: 20000
+    max-tokens: 2500
+    temperature: 0.2
+    stub-enabled: ${MISTRAL_STUB_ENABLED:false}

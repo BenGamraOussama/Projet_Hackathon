@@ -1,7 +1,5 @@
 
-import { useState } from 'react';
 import Card from '../../../components/base/Card';
-import Button from '../../../components/base/Button';
 import Badge from '../../../components/base/Badge';
 
 interface ProfileHeaderProps {
@@ -23,7 +21,7 @@ export default function ProfileHeader({
   joinDate,
   onEditClick
 }: ProfileHeaderProps) {
-  const initials = `${firstName[0]}${lastName[0]}`;
+  const initials = `${firstName?.[0] || '?'}${lastName?.[0] || ''}`;
   const formattedDate = new Date(joinDate).toLocaleDateString('fr-FR', {
     month: 'long',
     year: 'numeric'

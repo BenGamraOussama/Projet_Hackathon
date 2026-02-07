@@ -1,22 +1,89 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { conversations, messages as allMessages } from '../../../mocks/messages';
 import Navbar from '../../../components/feature/Navbar';
+import { messageService } from '../../../services/message.service';
+import { authService } from '../../../services/auth.service';
+import { userService } from '../../../services/user.service';
 
 export default function ConversationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [messageText, setMessageText] = useState('');
-  const [conversationMessages, setConversationMessages] = useState(
-    allMessages.filter(msg => msg.conversationId === id)
-  );
+  const [conversationMessages, setConversationMessages] = useState<any[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [conversation, setConversation] = useState<{
+    participantName: string;
+    participantRole: string;
+    participantAvatar: string;
+    isOnline: boolean;
+  } | null>(null);
 
-  const conversation = conversations.find(conv => conv.id === id);
+  const currentUserEmail = authService.getCurrentUser();
 
   const emojis = ['😊', '👍', '❤️', '😂', '🎉', '👏', '🔥', '✅', '💪', '🙏', '😍', '🤔', '👌', '💯', '🚀'];
+
+  useEffect(() => {
+    const loadConversation = async () => {
+      if (!id || !currentUserEmail) return;
+
+      try {
+        const messages = await messageService.getAll();
+        const filtered = messages
+          .filter((msg) =>
+            (msg.senderId === currentUserEmail && msg.recipientId === id) ||
+            (msg.senderId === id && msg.recipientId === currentUserEmail)
+          )
+          .map((msg) => ({
+            ...msg,
+            isRead: msg.read ?? msg.isRead ?? false
+          }))
+          .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        setConversationMessages(filtered);
+
+        let participantName = id;
+        let participantRole = 'Utilisateur';
+
+        try {
+          const [admins, formateurs, responsables] = await Promise.all([
+            userService.getByRole('ADMIN'),
+            userService.getByRole('FORMATEUR'),
+            userService.getByRole('RESPONSABLE')
+          ]);
+          const participant = [...admins, ...formateurs, ...responsables].find((user) => user.email === id);
+          if (participant) {
+            participantName = `${participant.firstName || ''} ${participant.lastName || ''}`.trim() || participant.email;
+            participantRole = participant.role === 'ADMIN'
+              ? 'Administrateur'
+              : participant.role === 'RESPONSABLE'
+                ? 'Responsable formation'
+                : 'Formateur';
+          }
+        } catch (error) {
+          console.error("Failed to load participant info", error);
+        }
+
+        const initials = participantName
+          .split(' ')
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((part) => part[0]?.toUpperCase())
+          .join('') || (id ? id[0]?.toUpperCase() : 'U');
+
+        setConversation({
+          participantName,
+          participantRole,
+          participantAvatar: initials,
+          isOnline: false
+        });
+      } catch (error) {
+        console.error("Failed to load conversation messages", error);
+      }
+    };
+
+    loadConversation();
+  }, [id, currentUserEmail]);
 
   useEffect(() => {
     scrollToBottom();
@@ -26,30 +93,34 @@ export default function ConversationDetail() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSendMessage = () => {
-    if (!messageText.trim()) return;
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !id || !currentUserEmail) return;
 
-    const newMessage = {
-      id: `msg-${Date.now()}`,
-      conversationId: id || '',
-      senderId: 'current-user',
-      senderName: 'Moi',
-      content: messageText,
-      timestamp: new Date().toISOString(),
-      isRead: true
-    };
+    try {
+      const saved = await messageService.sendMessage({
+        senderId: currentUserEmail,
+        recipientId: id,
+        content: messageText
+      });
 
-    setConversationMessages([...conversationMessages, newMessage]);
-    setMessageText('');
-    setShowEmojiPicker(false);
+      const newMessage = {
+        ...saved,
+        isRead: saved.read ?? saved.isRead ?? false
+      };
 
-    // Simuler "en train d'écrire..."
-    setTimeout(() => {
-      setIsTyping(true);
+      setConversationMessages((prev) => [...prev, newMessage]);
+      setMessageText('');
+      setShowEmojiPicker(false);
+
       setTimeout(() => {
-        setIsTyping(false);
-      }, 2000);
-    }, 500);
+        setIsTyping(true);
+        setTimeout(() => {
+          setIsTyping(false);
+        }, 2000);
+      }, 500);
+    } catch (error) {
+      console.error("Failed to send message", error);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -103,7 +174,6 @@ export default function ConversationDetail() {
     );
   }
 
-  // Grouper les messages par date
   const groupedMessages: { [key: string]: typeof conversationMessages } = {};
   conversationMessages.forEach(msg => {
     const dateKey = formatMessageDate(msg.timestamp);
@@ -117,7 +187,6 @@ export default function ConversationDetail() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Navbar />
       
-      {/* Header de conversation */}
       <div className="bg-white border-b border-gray-200 sticky top-16 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
@@ -172,21 +241,18 @@ export default function ConversationDetail() {
         </div>
       </div>
 
-      {/* Zone des messages */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {Object.entries(groupedMessages).map(([date, msgs]) => (
             <div key={date}>
-              {/* Séparateur de date */}
               <div className="flex items-center justify-center my-6">
                 <div className="px-4 py-1.5 bg-gray-200 rounded-full">
                   <span className="text-xs font-medium text-gray-600">{date}</span>
                 </div>
               </div>
 
-              {/* Messages du jour */}
               {msgs.map((message, index) => {
-                const isCurrentUser = message.senderId === 'current-user';
+                const isCurrentUser = message.senderId === currentUserEmail;
                 const showAvatar = !isCurrentUser && (index === 0 || msgs[index - 1].senderId !== message.senderId);
 
                 return (
@@ -194,7 +260,6 @@ export default function ConversationDetail() {
                     key={message.id}
                     className={`flex items-end gap-2 mb-4 ${isCurrentUser ? 'flex-row-reverse' : 'flex-row'}`}
                   >
-                    {/* Avatar */}
                     <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
                       {showAvatar && !isCurrentUser && (
                         <div className="w-8 h-8 flex items-center justify-center bg-gradient-to-br from-teal-500 to-teal-600 rounded-full text-white font-medium text-sm">
@@ -203,7 +268,6 @@ export default function ConversationDetail() {
                       )}
                     </div>
 
-                    {/* Bulle de message */}
                     <div className={`flex flex-col ${isCurrentUser ? 'items-end' : 'items-start'} max-w-[70%]`}>
                       <div
                         className={`px-4 py-2.5 rounded-2xl ${
@@ -217,7 +281,6 @@ export default function ConversationDetail() {
                         </p>
                       </div>
                       
-                      {/* Heure et statut de lecture */}
                       <div className="flex items-center gap-1 mt-1 px-1">
                         <span className="text-xs text-gray-500">{formatMessageTime(message.timestamp)}</span>
                         {isCurrentUser && (
@@ -236,7 +299,6 @@ export default function ConversationDetail() {
             </div>
           ))}
 
-          {/* Indicateur "en train d'écrire..." */}
           {isTyping && (
             <div className="flex items-end gap-2 mb-4">
               <div className="w-8 h-8 flex items-center justify-center bg-gradient-to-br from-teal-500 to-teal-600 rounded-full text-white font-medium text-sm">
@@ -256,10 +318,8 @@ export default function ConversationDetail() {
         </div>
       </div>
 
-      {/* Zone de saisie */}
       <div className="bg-white border-t border-gray-200 sticky bottom-0">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          {/* Sélecteur d'emojis */}
           {showEmojiPicker && (
             <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
               <div className="flex flex-wrap gap-2">
@@ -278,7 +338,6 @@ export default function ConversationDetail() {
           )}
 
           <div className="flex items-end gap-3">
-            {/* Bouton emoji */}
             <button
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
               className={`p-3 rounded-lg transition-colors duration-200 cursor-pointer ${
@@ -289,7 +348,6 @@ export default function ConversationDetail() {
               <i className="ri-emotion-line text-xl" aria-hidden="true"></i>
             </button>
 
-            {/* Champ de saisie */}
             <div className="flex-1 relative">
               <textarea
                 value={messageText}
@@ -302,7 +360,6 @@ export default function ConversationDetail() {
               />
             </div>
 
-            {/* Bouton envoyer */}
             <button
               onClick={handleSendMessage}
               disabled={!messageText.trim()}

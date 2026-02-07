@@ -3,8 +3,10 @@ import Navbar from '../../components/feature/Navbar';
 import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
 import Badge from '../../components/base/Badge';
-import { studentsData } from '../../mocks/students';
-import { trainingsData } from '../../mocks/trainings';
+import { studentService } from '../../services/student.service';
+import { trainingService } from '../../services/training.service';
+import { sessionService } from '../../services/session.service';
+import { certificateService } from '../../services/certificate.service';
 
 interface Student {
   id: number;
@@ -20,6 +22,8 @@ interface Student {
   totalSessions: number;
   attendanceRate: number;
   eligibleForCertification: boolean;
+  blockReason?: string;
+  trainingName?: string;
 }
 
 export default function Certification() {
@@ -32,18 +36,79 @@ export default function Certification() {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'info'>('info');
   const [isDownloading, setIsDownloading] = useState(false);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [trainings, setTrainings] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [certificates, setCertificates] = useState<any[]>([]);
   
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   
-  const eligibleStudents = studentsData.filter(s => s.eligibleForCertification);
-  const blockedStudents = studentsData.filter(s => !s.eligibleForCertification && s.currentLevel === 4);
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [studentsData, trainingsData, sessionsData, certificatesData] = await Promise.all([
+          studentService.getProgressAll(),
+          trainingService.getAll(),
+          sessionService.getAll(),
+          certificateService.getAll()
+        ]);
+
+        const normalized = studentsData.map((student) => ({
+          id: student.studentId ?? student.id,
+          firstName: student.firstName,
+          lastName: student.lastName,
+          email: student.email,
+          phone: student.phone,
+          enrollmentDate: student.enrollmentDate,
+          status: student.status,
+          trainingId: student.trainingId ?? null,
+          currentLevel: student.currentLevel ?? 1,
+          totalSessions: student.totalSessions ?? 0,
+          completedSessions: student.completedSessions ?? 0,
+          attendanceRate: student.attendanceRate ?? 0,
+          eligibleForCertification: student.eligibleForCertification ?? false,
+          blockReason: student.blockReason,
+          trainingName: student.trainingName
+        }));
+        setStudents(normalized);
+        setTrainings(trainingsData);
+        setSessions(sessionsData);
+        setCertificates(certificatesData);
+      } catch (error) {
+        console.error("Failed to load certification data", error);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  const eligibleStudents = students.filter(s => s.eligibleForCertification);
+  const blockedStudents = students.filter(s => !s.eligibleForCertification && s.currentLevel === 4);
   
   const getTrainingName = (trainingId: number) => {
-    return trainingsData.find(t => t.id === trainingId)?.name || 'Unknown';
+    return trainings.find(t => t.id === trainingId)?.name
+      || students.find(s => s.trainingId === trainingId)?.trainingName
+      || 'Unknown';
   };
-  
-  const getBlockedReason = (student: typeof studentsData[0]) => {
+
+  const getTrainingSessions = (trainingId: number) => {
+    return sessions.filter((session) => (session.training?.id ?? session.trainingId) === trainingId);
+  };
+
+  const getTotalLevelsForTraining = (trainingId: number) => {
+    const levels = new Set(
+      getTrainingSessions(trainingId)
+        .map((session) => Number(session.levelNumber))
+        .filter((n) => Number.isFinite(n))
+    );
+    return levels.size > 0 ? levels.size : 4;
+  };
+
+  const getBlockedReason = (student: Student) => {
+    if (student.blockReason && student.blockReason.trim() !== '') {
+      return student.blockReason;
+    }
     if (student.completedSessions < student.totalSessions) {
       return `Missing ${student.totalSessions - student.completedSessions} sessions`;
     }
@@ -53,25 +118,50 @@ export default function Certification() {
     return 'Requirements not met';
   };
   
-  const generateCertificateId = () => {
-    const year = new Date().getFullYear();
-    const randomNum = Math.floor(Math.random() * 9000) + 1000;
-    return `ASTBA-${year}-${randomNum}`;
-  };
-  
   const handleGenerateCertificate = (student: Student) => {
     setSelectedStudent(student);
-    setCertificateId(generateCertificateId());
+    const existing = certificates.find(
+      (certificate) =>
+        (certificate.student?.id ?? certificate.studentId) === student.id &&
+        (certificate.training?.id ?? certificate.trainingId) === student.trainingId
+    );
+    if (existing?.certificateId) {
+      setCertificateId(existing.certificateId);
+      setGenerationSuccess(true);
+    } else {
+      setCertificateId('');
+      setGenerationSuccess(false);
+    }
     setShowGenerateModal(true);
-    setGenerationSuccess(false);
   };
   
-  const handleConfirmGenerate = () => {
+  const handleConfirmGenerate = async () => {
+    if (!selectedStudent) {
+      return;
+    }
     setIsGenerating(true);
-    setTimeout(() => {
-      setIsGenerating(false);
+    try {
+      const response = await certificateService.create({
+        studentId: selectedStudent.id,
+        trainingId: selectedStudent.trainingId
+      });
+      setCertificateId(response.certificateId);
       setGenerationSuccess(true);
-    }, 2000);
+      setCertificates((prev) => {
+        const exists = prev.find((certificate) => certificate.id === response.id);
+        if (exists) {
+          return prev.map((certificate) => certificate.id === response.id ? response : certificate);
+        }
+        return [...prev, response];
+      });
+    } catch (error: any) {
+      setToastMessage(error?.response?.data || 'Failed to generate certificate');
+      setToastType('info');
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 4000);
+    } finally {
+      setIsGenerating(false);
+    }
   };
   
   const handleDownloadPDF = () => {
@@ -79,6 +169,8 @@ export default function Certification() {
     
     // Simulate PDF generation and download
     setTimeout(() => {
+      const totalLevels = selectedStudent ? getTotalLevelsForTraining(selectedStudent.trainingId) : 4;
+      const sessionsAttended = selectedStudent?.completedSessions ?? 0;
       // Create a simulated PDF download
       const certificateContent = `
 ASTBA - Certificate of Completion
@@ -93,8 +185,8 @@ has successfully completed
 ${getTrainingName(selectedStudent?.trainingId || 0)}
 
 Completion Details:
-- Levels Completed: 4
-- Sessions Attended: 24
+- Levels Completed: ${totalLevels}
+- Sessions Attended: ${sessionsAttended}
 - Attendance Rate: ${selectedStudent?.attendanceRate}%
 
 Certificate ID: ${certificateId}
@@ -145,6 +237,17 @@ ASTBA Training Academy
     setSelectedStudent(null);
     setGenerationSuccess(false);
   };
+
+  const previewName = selectedStudent
+    ? `${selectedStudent.firstName} ${selectedStudent.lastName}`
+    : 'Student Name';
+  const previewTrainingName = selectedStudent
+    ? getTrainingName(selectedStudent.trainingId)
+    : 'Training Program Name';
+  const previewLevels = selectedStudent
+    ? getTotalLevelsForTraining(selectedStudent.trainingId)
+    : 4;
+  const previewSessions = selectedStudent?.totalSessions ?? 24;
   
   // Focus trap and keyboard handling
   useEffect(() => {
@@ -225,7 +328,7 @@ ASTBA Training Academy
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Certificates Issued</p>
-                <p className="text-3xl font-bold text-gray-900">12</p>
+                <p className="text-3xl font-bold text-gray-900">{certificates.length}</p>
               </div>
             </div>
           </Card>
@@ -247,7 +350,7 @@ ASTBA Training Academy
                   >
                     <div className="flex items-start gap-4 mb-4">
                       <div className="w-12 h-12 flex items-center justify-center bg-green-600 text-white rounded-full font-semibold text-lg">
-                        {student.firstName[0]}{student.lastName[0]}
+                        {(student.firstName?.[0] || '?')}{(student.lastName?.[0] || '')}
                       </div>
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-900 mb-1">{student.firstName} {student.lastName}</h3>
@@ -306,7 +409,7 @@ ASTBA Training Academy
                   >
                     <div className="flex items-start gap-4 mb-3">
                       <div className="w-12 h-12 flex items-center justify-center bg-amber-600 text-white rounded-full font-semibold text-lg">
-                        {student.firstName[0]}{student.lastName[0]}
+                        {(student.firstName?.[0] || '?')}{(student.lastName?.[0] || '')}
                       </div>
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-900 mb-1">{student.firstName} {student.lastName}</h3>
@@ -357,10 +460,10 @@ ASTBA Training Academy
             </div>
             
             <div className="my-8">
-              <p className="text-4xl font-bold text-teal-600 mb-4">Student Name</p>
+              <p className="text-4xl font-bold text-teal-600 mb-4">{previewName}</p>
               <p className="text-lg text-gray-700 mb-2">has successfully completed</p>
-              <p className="text-2xl font-semibold text-gray-900 mb-6">Training Program Name</p>
-              <p className="text-base text-gray-600">Completed all 4 levels with 24 sessions</p>
+              <p className="text-2xl font-semibold text-gray-900 mb-6">{previewTrainingName}</p>
+              <p className="text-base text-gray-600">Completed all {previewLevels} levels with {previewSessions} sessions</p>
             </div>
             
             <div className="flex justify-between items-end pt-8 border-t-2 border-gray-300">
@@ -375,7 +478,7 @@ ASTBA Training Academy
                 <div className="border-t-2 border-gray-900 pt-2 mb-1">
                   <p className="text-sm font-semibold text-gray-900">Director Signature</p>
                 </div>
-                <p className="text-xs text-gray-600">Certificate ID: ASTBA-2024-001</p>
+                <p className="text-xs text-gray-600">Certificate ID: {certificateId || 'ASTBA-XXXX-0000'}</p>
               </div>
             </div>
           </div>
@@ -466,11 +569,11 @@ ASTBA Training Academy
                   <div className="flex flex-wrap justify-center gap-4 text-sm text-gray-600">
                     <span className="flex items-center gap-1">
                       <i className="ri-stack-line text-teal-600" aria-hidden="true"></i>
-                      4 Levels Completed
+                      {getTotalLevelsForTraining(selectedStudent.trainingId)} Levels Completed
                     </span>
                     <span className="flex items-center gap-1">
                       <i className="ri-calendar-check-line text-teal-600" aria-hidden="true"></i>
-                      24 Sessions Attended
+                      {selectedStudent.completedSessions} Sessions Attended
                     </span>
                     <span className="flex items-center gap-1">
                       <i className="ri-bar-chart-line text-teal-600" aria-hidden="true"></i>

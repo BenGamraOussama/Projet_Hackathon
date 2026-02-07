@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from '../../components/feature/Navbar';
 import ProfileHeader from './components/ProfileHeader';
 import PersonalInfo from './components/PersonalInfo';
@@ -7,19 +7,80 @@ import NotificationsPanel from './components/NotificationsPanel';
 import QuickLinks from './components/QuickLinks';
 import EditProfileModal, { ProfileFormData } from './components/EditProfileModal';
 import { userProfileData } from '../../mocks/userProfile';
-import { studentsData } from '../../mocks/students';
-import { trainingsData } from '../../mocks/trainings';
+import { userService } from '../../services/user.service';
+import { studentService } from '../../services/student.service';
+import { trainingService } from '../../services/training.service';
+import { authService } from '../../services/auth.service';
 
 export default function Profile() {
   const [profile, setProfile] = useState(userProfileData);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
+  const [stats, setStats] = useState({
+    studentsManaged: 0,
+    trainingsActive: 0,
+    sessionsCompleted: 0
+  });
 
-  const stats = {
-    studentsManaged: studentsData.length,
-    trainingsActive: trainingsData.filter(t => t.status === 'active').length,
-    sessionsCompleted: studentsData.reduce((sum, s) => sum + s.completedSessions, 0)
-  };
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const me = await userService.getMe();
+        const roleLabel = me.role === 'ADMIN'
+          ? 'Administrateur'
+          : me.role === 'RESPONSABLE'
+            ? 'Responsable formation'
+            : 'Formateur';
+        setProfile(prev => ({
+          ...prev,
+          firstName: me.firstName || prev.firstName,
+          lastName: me.lastName || prev.lastName,
+          email: me.email || prev.email,
+          role: roleLabel
+        }));
+      } catch (error) {
+        console.error("Failed to load profile", error);
+        const cached = authService.getUserProfile();
+        if (cached?.email) {
+          setProfile(prev => ({
+            ...prev,
+            firstName: cached.firstName || prev.firstName,
+            lastName: cached.lastName || prev.lastName,
+            email: cached.email || prev.email,
+            role: cached.role === 'ADMIN'
+              ? 'Administrateur'
+              : cached.role === 'RESPONSABLE'
+                ? 'Responsable formation'
+                : 'Formateur'
+          }));
+        }
+      }
+    };
+
+    const loadStats = async () => {
+      try {
+        const [students, trainings] = await Promise.all([
+          studentService.getAll(),
+          trainingService.getAll()
+        ]);
+        const normalizedStudents = students.map((student) => {
+          const totalSessions = student.totalSessions ?? 24;
+          const completedSessions = student.completedSessions ?? 0;
+          return { totalSessions, completedSessions };
+        });
+        setStats({
+          studentsManaged: students.length,
+          trainingsActive: trainings.filter(t => t.status === 'active').length,
+          sessionsCompleted: normalizedStudents.reduce((sum, s) => sum + s.completedSessions, 0)
+        });
+      } catch (error) {
+        console.error("Failed to load profile stats", error);
+      }
+    };
+
+    loadProfile();
+    loadStats();
+  }, []);
 
   const handleSave = (data: ProfileFormData) => {
     setProfile(prev => ({

@@ -1,24 +1,129 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import Navbar from '../../../components/feature/Navbar';
 import Card from '../../../components/base/Card';
 import Button from '../../../components/base/Button';
 import Badge from '../../../components/base/Badge';
-import { studentsData } from '../../../mocks/students';
-import { trainingsData } from '../../../mocks/trainings';
-import { studentAttendanceRecords } from '../../../mocks/studentAttendance';
+import { studentService } from '../../../services/student.service';
+import { trainingService } from '../../../services/training.service';
+import { attendanceService } from '../../../services/attendance.service';
+import { sessionService } from '../../../services/session.service';
+import { enrollmentService } from '../../../services/enrollment.service';
 
 type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+type SessionItem = {
+  id: number;
+  levelNumber?: number | null;
+  level?: number | null;
+  sessionNumber?: number | null;
+  title?: string | null;
+};
+type TrainingSummary = {
+  id: number;
+  name?: string | null;
+  title?: string | null;
+};
+type AttendanceRecord = {
+  id: number;
+  sessionId: number;
+  status: AttendanceStatus;
+  date: string;
+  student?: { id?: number | null };
+};
 
 export default function StudentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'progress'>('overview');
   const [filterLevel, setFilterLevel] = useState<number | 'all'>('all');
-  
-  const student = studentsData.find(s => s.id === Number(id));
-  const training = student ? trainingsData.find(t => t.id === student.trainingId) : null;
-  const attendanceRecords = studentAttendanceRecords.filter(r => r.studentId === Number(id));
+  const [student, setStudent] = useState<any | null>(null);
+  const [training, setTraining] = useState<any | null>(null);
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStudent = async () => {
+      if (!id) return;
+      setIsLoading(true);
+
+      try {
+        const progressData = await studentService.getProgressById(id);
+        const trainingId = progressData.trainingId ?? null;
+
+        const [trainingsData, sessionsData, attendanceData, enrollmentsData] = await Promise.all([
+          trainingService.getAll(),
+          trainingId ? sessionService.getByTraining(trainingId) : Promise.resolve([]),
+          attendanceService.getByStudent(Number(id)),
+          enrollmentService.getByStudent(Number(id))
+        ]);
+
+        const trainingsList = (trainingsData ?? []) as TrainingSummary[];
+        const sessionsList = (sessionsData ?? []) as SessionItem[];
+        const attendanceList = (attendanceData ?? []) as AttendanceRecord[];
+        const enrollmentsList = (enrollmentsData ?? []) as any[];
+
+        setTraining(trainingsList.find(t => t.id === trainingId) || null);
+        setSessions(sessionsList);
+        setEnrollments(enrollmentsList);
+
+        const totalSessionsFromTraining = sessionsList.length > 0 ? sessionsList.length : 24;
+        const totalSessions = progressData.totalSessions ?? totalSessionsFromTraining;
+        const completedSessions = progressData.completedSessions ?? attendanceList.length;
+        const presentCount = attendanceList.filter((record) => record.status === 'present' || record.status === 'late').length;
+        const attendanceRate = progressData.attendanceRate ?? (completedSessions > 0
+          ? Math.round((presentCount / completedSessions) * 100)
+          : 0);
+        const eligibleForCertification = progressData.eligibleForCertification ?? (completedSessions >= totalSessions && attendanceRate >= 80);
+
+        setStudent({
+          id: progressData.studentId ?? progressData.id,
+          firstName: progressData.firstName,
+          lastName: progressData.lastName,
+          email: progressData.email,
+          phone: progressData.phone,
+          enrollmentDate: progressData.enrollmentDate,
+          status: progressData.status ?? 'active',
+          trainingId,
+          currentLevel: progressData.currentLevel ?? 1,
+          totalSessions,
+          completedSessions,
+          attendanceRate,
+          eligibleForCertification,
+          blockReason: progressData.blockReason
+        });
+
+        const sessionMap = new Map(
+          sessionsList.map((session) => [session.id, session])
+        );
+        const mappedAttendance = attendanceList.map((record) => {
+          const session = sessionMap.get(record.sessionId);
+          return {
+            id: record.id,
+            studentId: record.student?.id ?? Number(id),
+            level: session?.levelNumber ?? session?.level ?? 1,
+            sessionNumber: session?.sessionNumber ?? record.sessionId,
+            sessionTitle: session?.title ?? `Session ${record.sessionId}`,
+            date: record.date,
+            status: record.status
+          };
+        });
+        setAttendanceRecords(mappedAttendance);
+      } catch (error) {
+        console.error("Failed to load student details", error);
+        setStudent(null);
+        setTraining(null);
+        setAttendanceRecords([]);
+        setSessions([]);
+        setEnrollments([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadStudent();
+  }, [id]);
   
   const attendanceStats = useMemo(() => {
     const total = attendanceRecords.length;
@@ -35,35 +140,48 @@ export default function StudentDetail() {
     return attendanceRecords.filter(r => r.level === filterLevel);
   }, [attendanceRecords, filterLevel]);
   
+  const levelOptions = useMemo(() => {
+    const numbers = Array.from(
+      new Set(
+        sessions
+          .map((session) => Number(session.levelNumber))
+          .filter((n) => Number.isFinite(n))
+      )
+    ).sort((a: number, b: number) => a - b);
+    return numbers.length > 0 ? numbers : [1, 2, 3, 4];
+  }, [sessions]);
+
+  const totalLevels = levelOptions.length > 0 ? levelOptions.length : 4;
+  const sessionsPerLevel = sessions.length > 0 ? Math.round(sessions.length / totalLevels) : 6;
+
   const levelProgress = useMemo(() => {
-    const levels = [1, 2, 3, 4];
-    return levels.map(level => {
+    return levelOptions.map(level => {
       const levelRecords = attendanceRecords.filter(r => r.level === level);
       const completed = levelRecords.length;
       const attended = levelRecords.filter(r => r.status === 'present' || r.status === 'late').length;
+      const total = sessions.filter((session) => Number(session.levelNumber) === Number(level)).length || 6;
       return {
         level,
         completed,
-        total: 6,
+        total,
         attended,
-        isComplete: completed === 6,
+        isComplete: completed === total,
         isCurrent: student?.currentLevel === level
       };
     });
-  }, [attendanceRecords, student]);
+  }, [attendanceRecords, student, sessions, levelOptions]);
   
   // Training history with detailed stats
   const trainingHistory = useMemo(() => {
     if (!training) return [];
     
-    const levels = [1, 2, 3, 4];
-    const history = levels.map(level => {
+    const history = levelOptions.map(level => {
       const levelRecords = attendanceRecords.filter(r => r.level === level);
       const present = levelRecords.filter(r => r.status === 'present').length;
       const late = levelRecords.filter(r => r.status === 'late').length;
       const absent = levelRecords.filter(r => r.status === 'absent').length;
       const excused = levelRecords.filter(r => r.status === 'excused').length;
-      const total = 6;
+      const total = sessions.filter((session) => Number(session.levelNumber) === Number(level)).length || 6;
       const completed = levelRecords.length;
       const attendanceRate = completed > 0 ? Math.round(((present + late) / completed) * 100) : 0;
       
@@ -85,7 +203,7 @@ export default function StudentDetail() {
     });
     
     return history;
-  }, [training, attendanceRecords, student]);
+  }, [training, attendanceRecords, student, sessions, levelOptions]);
   
   const getStatusBadge = (status: AttendanceStatus) => {
     const config = {
@@ -112,6 +230,23 @@ export default function StudentDetail() {
     });
   };
   
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Card>
+            <div className="text-center py-16">
+              <i className="ri-loader-4-line text-4xl text-gray-400 animate-spin mb-4" aria-hidden="true"></i>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Chargement...</h2>
+              <p className="text-sm text-gray-600">Récupération des données de l'élève</p>
+            </div>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
   if (!student) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -170,7 +305,7 @@ export default function StudentDetail() {
           <Card className="lg:w-80 flex-shrink-0">
             <div className="text-center">
               <div className="w-24 h-24 flex items-center justify-center bg-teal-100 text-teal-700 rounded-full mx-auto mb-4 text-3xl font-bold">
-                {student.firstName[0]}{student.lastName[0]}
+                {(student.firstName?.[0] || '?')}{(student.lastName?.[0] || '')}
               </div>
               <h1 className="text-2xl font-bold text-gray-900 mb-1">
                 {student.firstName} {student.lastName}
@@ -292,11 +427,11 @@ export default function StudentDetail() {
               </div>
               <div className="flex items-center gap-6">
                 <div className="text-center">
-                  <p className="text-2xl font-bold">{training.totalLevels}</p>
+                  <p className="text-2xl font-bold">{totalLevels}</p>
                   <p className="text-xs text-gray-300">Levels</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold">{training.sessionsPerLevel}</p>
+                  <p className="text-2xl font-bold">{sessionsPerLevel}</p>
                   <p className="text-xs text-gray-300">Sessions/Level</p>
                 </div>
                 <Link to="/trainings">
@@ -378,6 +513,46 @@ export default function StudentDetail() {
                   <p className="text-sm text-teal-600">Excused</p>
                 </div>
               </div>
+            </Card>
+
+            {/* Enrollment History */}
+            <Card>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <i className="ri-clipboard-line text-teal-600" aria-hidden="true"></i>
+                Historique des formations
+              </h2>
+              {enrollments.length > 0 ? (
+                <div className="space-y-3">
+                  {enrollments.map((enrollment: any) => (
+                    <div key={enrollment.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                        <div>
+                          <p className="text-sm text-gray-500">Formation</p>
+                          <p className="text-base font-semibold text-gray-900">
+                            {enrollment.training?.name || 'Formation'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-gray-600">
+                          <span>
+                            Debut: {enrollment.startDate ? formatDate(enrollment.startDate) : '-'}
+                          </span>
+                          <span>
+                            Fin: {enrollment.endDate ? formatDate(enrollment.endDate) : '-'}
+                          </span>
+                        </div>
+                        <Badge variant={enrollment.status === 'ACTIVE' ? 'success' : 'info'}>
+                          {enrollment.status || 'ACTIVE'}
+                        </Badge>
+                      </div>
+                      {enrollment.notes && (
+                        <p className="text-sm text-gray-600 mt-2">{enrollment.notes}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-600">Aucune formation n'est enregistree pour cet eleve.</div>
+              )}
             </Card>
             
             {/* Training History */}
@@ -546,7 +721,7 @@ export default function StudentDetail() {
                       <p className="text-xs text-gray-300">Global Rate</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-3xl font-bold">{levelProgress.filter(l => l.isComplete).length}/4</p>
+                      <p className="text-3xl font-bold">{levelProgress.filter(l => l.isComplete).length}/{totalLevels}</p>
                       <p className="text-xs text-gray-300">Levels Done</p>
                     </div>
                   </div>
@@ -608,7 +783,9 @@ export default function StudentDetail() {
                   }`}>
                     {student.eligibleForCertification 
                       ? 'This student has completed all required sessions and is eligible to receive their certificate.'
-                      : `${student.totalSessions - student.completedSessions} sessions remaining to complete the training program.`}
+                      : (student.blockReason && student.blockReason.trim() !== ''
+                        ? student.blockReason
+                        : `${student.totalSessions - student.completedSessions} sessions remaining to complete the training program.`)}
                   </p>
                 </div>
                 {student.eligibleForCertification && (
@@ -641,10 +818,9 @@ export default function StudentDetail() {
                     className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
                   >
                     <option value="all">All Levels</option>
-                    <option value="1">Level 1</option>
-                    <option value="2">Level 2</option>
-                    <option value="3">Level 3</option>
-                    <option value="4">Level 4</option>
+                    {levelOptions.map((level) => (
+                      <option key={level} value={level}>Level {level}</option>
+                    ))}
                   </select>
                 </div>
               </div>

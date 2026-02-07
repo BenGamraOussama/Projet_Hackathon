@@ -1,15 +1,19 @@
 
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
-import { conversations } from '../../mocks/messages';
+import { authService } from '../../services/auth.service';
+import { messageService } from '../../services/message.service';
 
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const accountMenuRef = useRef<HTMLDivElement>(null);
 
-  const totalUnreadMessages = conversations.reduce((sum, conv) => sum + conv.unreadCount, 0);
+  const profile = authService.getUserProfile();
+  const userRole = profile?.role || '';
+  const fullName = `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim() || 'Utilisateur';
 
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -25,19 +29,47 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    const loadUnreadCount = async () => {
+      try {
+        const messages = await messageService.getAll();
+        const currentUserEmail = authService.getCurrentUser();
+        const total = messages.filter((msg) => {
+          const isRead = msg.read ?? msg.isRead ?? false;
+          return !isRead && msg.recipientId === currentUserEmail;
+        }).length;
+        setUnreadCount(total);
+      } catch (error) {
+        console.error("Failed to load unread messages", error);
+      }
+    };
+
+    if (authService.isAuthenticated()) {
+      loadUnreadCount();
+    }
+  }, []);
+
   const navLinks = [
-    { path: '/dashboard', label: 'Tableau de bord', icon: 'ri-dashboard-line' },
-    { path: '/students', label: 'Élèves', icon: 'ri-user-line' },
-    { path: '/trainings', label: 'Formations', icon: 'ri-book-line' },
-    { path: '/attendance', label: 'Présences', icon: 'ri-calendar-check-line' },
-    { path: '/certification', label: 'Certifications', icon: 'ri-award-line' },
-    { path: '/messages', label: 'Messages', icon: 'ri-message-3-line', badge: totalUnreadMessages },
+    { path: '/dashboard', label: 'Tableau de bord', icon: 'ri-dashboard-line', roles: ['ADMIN', 'FORMATEUR', 'RESPONSABLE'] },
+    { path: '/students', label: 'Eleves', icon: 'ri-user-line', roles: ['ADMIN', 'FORMATEUR', 'RESPONSABLE'] },
+    { path: '/trainings', label: 'Formations', icon: 'ri-book-line', roles: ['ADMIN', 'RESPONSABLE'] },
+    { path: '/attendance', label: 'Presences', icon: 'ri-calendar-check-line', roles: ['ADMIN', 'FORMATEUR', 'RESPONSABLE'] },
+    { path: '/certification', label: 'Certifications', icon: 'ri-award-line', roles: ['ADMIN', 'RESPONSABLE'] },
+    { path: '/reports', label: 'Rapports', icon: 'ri-bar-chart-2-line', roles: ['ADMIN', 'RESPONSABLE'] },
+    { path: '/users', label: 'Utilisateurs', icon: 'ri-team-line', roles: ['ADMIN'] },
+    { path: '/audit-logs', label: 'Audit', icon: 'ri-shield-check-line', roles: ['ADMIN'] },
+    { path: '/messages', label: 'Messages', icon: 'ri-message-3-line', badge: unreadCount, roles: ['ADMIN', 'FORMATEUR', 'RESPONSABLE'] },
   ];
+
+  const visibleLinks = userRole
+    ? navLinks.filter((link) => !link.roles || link.roles.includes(userRole))
+    : navLinks;
 
   const isAccountActive = location.pathname === '/profile' || location.pathname === '/accessibility';
 
   const handleLogout = () => {
     setIsAccountMenuOpen(false);
+    authService.logout();
     navigate('/login');
   };
 
@@ -46,16 +78,18 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-3 cursor-pointer">
-            <div className="w-10 h-10 flex items-center justify-center bg-gradient-to-br from-teal-500 to-teal-600 rounded-lg">
-              <i className="ri-graduation-cap-line text-2xl text-white" aria-hidden="true"></i>
-            </div>
+          <Link to="/dashboard" className="flex items-center gap-3 cursor-pointer">
+            <img
+              src="https://static.readdy.ai/image/bf4e711212c75bfc790e10d1f48c04b1/405300009b422c3bf3fc7c3883a1975c.png"
+              alt="ASTBA Logo"
+              className="h-10 w-auto"
+            />
             <span className="text-xl font-bold text-gray-900">ASTBA</span>
           </Link>
 
           {/* Navigation Links */}
           <div className="hidden md:flex items-center gap-1">
-            {navLinks.map((link) => (
+            {visibleLinks.map((link) => (
               <Link
                 key={link.path}
                 to={link.path}
@@ -95,8 +129,10 @@ export default function Navbar() {
               {isAccountMenuOpen && (
                 <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 animate-fade-in">
                   <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-sm font-semibold text-gray-900">Mohamed Ben Ali</p>
-                    <p className="text-xs text-gray-500">Formateur principal</p>
+                    <p className="text-sm font-semibold text-gray-900">{fullName}</p>
+                    <p className="text-xs text-gray-500">
+                      {userRole === 'ADMIN' ? 'Administrateur' : userRole === 'RESPONSABLE' ? 'Responsable formation' : 'Formateur'}
+                    </p>
                   </div>
 
                   <div className="py-1">

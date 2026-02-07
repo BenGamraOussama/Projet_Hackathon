@@ -1,3 +1,35 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root.enhanced-focus *:focus {
+  outline: 3px solid #0f766e !important;
+  outline-offset: 2px;
+}
+
+:root.reduce-motion * {
+  animation-duration: 0s !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+:root.high-contrast {
+  filter: contrast(1.15);
+}
+
+:root.protanopia {
+  filter: saturate(0.85) hue-rotate(12deg);
+}
+
+:root.deuteranopia {
+  filter: saturate(0.85) hue-rotate(-12deg);
+}
+
+:root.tritanopia {
+  filter: saturate(0.85) hue-rotate(30deg);
+}
+
+:root.simplify-ui * {
+  box-shadow: none !important;
+  background-image: none !important;
+}

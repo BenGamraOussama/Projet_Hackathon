@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { userService } from '../../../services/user.service';
 
 interface Trainer {
   id: string;
@@ -14,85 +15,45 @@ interface NewConversationModalProps {
   onSelectTrainer: (trainerId: string) => void;
 }
 
-const availableTrainers: Trainer[] = [
-  {
-    id: 'user-2',
-    name: 'Sarah Mansour',
-    role: 'Formatrice Robotique',
-    avatar: 'SM',
-    isOnline: true
-  },
-  {
-    id: 'user-3',
-    name: 'Ahmed Ben Ali',
-    role: 'Formateur Programmation',
-    avatar: 'AB',
-    isOnline: false
-  },
-  {
-    id: 'user-4',
-    name: 'Leila Trabelsi',
-    role: 'Coordinatrice Pédagogique',
-    avatar: 'LT',
-    isOnline: true
-  },
-  {
-    id: 'user-5',
-    name: 'Mohamed Karim',
-    role: 'Formateur Électronique',
-    avatar: 'MK',
-    isOnline: false
-  },
-  {
-    id: 'user-6',
-    name: 'Fatma Gharbi',
-    role: 'Formatrice Design 3D',
-    avatar: 'FG',
-    isOnline: true
-  },
-  {
-    id: 'user-7',
-    name: 'Youssef Hamdi',
-    role: 'Formateur IoT',
-    avatar: 'YH',
-    isOnline: false
-  },
-  {
-    id: 'user-8',
-    name: 'Amira Sassi',
-    role: 'Responsable Administrative',
-    avatar: 'AS',
-    isOnline: false
-  },
-  {
-    id: 'user-9',
-    name: 'Karim Bouaziz',
-    role: 'Formateur Web Development',
-    avatar: 'KB',
-    isOnline: true
-  },
-  {
-    id: 'user-10',
-    name: 'Nadia Jlassi',
-    role: 'Formatrice Data Science',
-    avatar: 'NJ',
-    isOnline: true
-  },
-  {
-    id: 'user-11',
-    name: 'Rami Chouchane',
-    role: 'Formateur Cybersécurité',
-    avatar: 'RC',
-    isOnline: false
-  }
-];
-
 export default function NewConversationModal({ isOpen, onClose, onSelectTrainer }: NewConversationModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [trainers, setTrainers] = useState<Trainer[]>([]);
+
+  useEffect(() => {
+    const loadTrainers = async () => {
+      try {
+        const [formateurs, responsables] = await Promise.all([
+          userService.getByRole('FORMATEUR'),
+          userService.getByRole('RESPONSABLE')
+        ]);
+        const users = [...formateurs, ...responsables];
+        const mapped = users.map((user) => {
+          const firstName = user.firstName || '';
+          const lastName = user.lastName || '';
+          const initials = `${firstName?.[0] || ''}${lastName?.[0] || ''}`.trim() || (user.email ? user.email[0]?.toUpperCase() : 'U');
+          return {
+            id: user.email || String(user.id),
+            name: `${firstName} ${lastName}`.trim() || user.email,
+            role: user.role === 'RESPONSABLE' ? 'Responsable formation' : 'Formateur',
+            avatar: initials.toUpperCase(),
+            isOnline: false
+          };
+        });
+        setTrainers(mapped);
+      } catch (error) {
+        console.error("Failed to load trainers", error);
+        setTrainers([]);
+      }
+    };
+
+    if (isOpen) {
+      loadTrainers();
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const filteredTrainers = availableTrainers.filter(trainer =>
+  const filteredTrainers = trainers.filter(trainer =>
     trainer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     trainer.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -113,7 +74,7 @@ export default function NewConversationModal({ isOpen, onClose, onSelectTrainer 
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Nouvelle conversation</h2>
-            <p className="text-sm text-gray-600 mt-1">Sélectionnez un formateur pour démarrer une conversation</p>
+            <p className="text-sm text-gray-600 mt-1">Sélectionnez un utilisateur pour démarrer une conversation</p>
           </div>
           <button
             onClick={onClose}
@@ -131,7 +92,7 @@ export default function NewConversationModal({ isOpen, onClose, onSelectTrainer 
             </div>
             <input
               type="text"
-              placeholder="Rechercher un formateur..."
+              placeholder="Rechercher un utilisateur..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
@@ -147,7 +108,7 @@ export default function NewConversationModal({ isOpen, onClose, onSelectTrainer 
               <div className="w-16 h-16 flex items-center justify-center bg-gray-100 rounded-full mx-auto mb-4">
                 <i className="ri-user-search-line text-3xl text-gray-400" aria-hidden="true"></i>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun formateur trouvé</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun utilisateur trouvé</h3>
               <p className="text-gray-600">Essayez avec d'autres mots-clés</p>
             </div>
           ) : (
@@ -196,7 +157,7 @@ export default function NewConversationModal({ isOpen, onClose, onSelectTrainer 
         {/* Footer */}
         <div className="p-6 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between text-sm text-gray-600">
-            <span>{filteredTrainers.length} formateur{filteredTrainers.length > 1 ? 's' : ''} disponible{filteredTrainers.length > 1 ? 's' : ''}</span>
+            <span>{filteredTrainers.length} utilisateur{filteredTrainers.length > 1 ? 's' : ''} disponible{filteredTrainers.length > 1 ? 's' : ''}</span>
             <button
               onClick={onClose}
               className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium cursor-pointer whitespace-nowrap"

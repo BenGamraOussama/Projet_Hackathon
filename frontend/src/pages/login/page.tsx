@@ -24,7 +24,7 @@ export default function Login() {
     try {
       if (formData.email && formData.password) {
         await authService.login(formData.email, formData.password);
-        navigate('/');
+        navigate('/dashboard');
       } else {
         setError('Veuillez remplir tous les champs');
       }
