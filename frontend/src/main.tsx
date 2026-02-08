@@ -18,7 +18,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
     if (this.state.hasError) {
       return (
         <div style={{ padding: 20, color: 'red' }}>
-          <h1>Component Error</h1>
+          <h1 tabIndex={-1}>Component Error</h1>
           <pre>{this.state.error?.toString()}</pre>
         </div>
       );

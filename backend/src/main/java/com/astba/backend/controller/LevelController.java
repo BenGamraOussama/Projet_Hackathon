@@ -127,10 +127,14 @@ public class LevelController {
         session.setTitle(request.getTitle() != null
                 ? request.getTitle()
                 : "Level " + level.getLevelNumber() + " - Session " + sessionIndex);
+        session.setObjective(request.getObjective());
         session.setStartAt(request.getStartAt());
         session.setDurationMin(request.getDurationMin() != null ? request.getDurationMin() : 120);
         session.setLocation(request.getLocation());
         session.setStatus(request.getStatus() != null ? request.getStatus() : "PLANNED");
+        session.setModality(request.getModality());
+        session.setMaterials(request.getMaterials());
+        session.setAccessibilityNotes(request.getAccessibilityNotes());
         Session saved = sessionRepository.save(session);
         auditService.log("SESSION_CREATED", "Session", String.valueOf(saved.getId()),
                 "Session created for level " + level.getId());

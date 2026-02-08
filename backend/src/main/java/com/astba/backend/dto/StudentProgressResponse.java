@@ -15,6 +15,7 @@ public class StudentProgressResponse {
     private Integer currentLevel;
     private Long trainingId;
     private String trainingName;
+    private String studentCode;
 
     private Integer completedSessions;
     private Integer totalSessions;

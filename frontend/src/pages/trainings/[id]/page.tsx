@@ -148,7 +148,7 @@ export default function TrainingDetailPage() {
   const [expandedLevels, setExpandedLevels] = useState<Record<number, boolean>>({});
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCreatingLevel, setIsCreatingLevel] = useState(false);
-  const [activeSessionCreateLevel, setActiveSessionCreateLevel] = useState<number | null>(null);
+  const [activeSessionCreateLevel, setActifSessionCreateLevel] = useState<number | null>(null);
 
   const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
   const [scheduleDraft, setScheduleDraft] = useState<ScheduleDraft | null>(null);
@@ -165,10 +165,10 @@ export default function TrainingDetailPage() {
   });
   const [aiDraft, setAiDraft] = useState<AiPlan | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiApplying, setAiApplying] = useState(false);
+  const [aiAppliquering, setAiAppliquering] = useState(false);
   const [aiPromptError, setAiPromptError] = useState<string | null>(null);
   const [aiFieldErrors, setAiFieldErrors] = useState<Record<string, string>>({});
-  const [aiSummaryErrors, setAiSummaryErrors] = useState<string[]>([]);
+  const [aiResumeErrors, setAiResumeErrors] = useState<string[]>([]);
   const [aiServerError, setAiServerError] = useState<string | null>(null);
 
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -248,21 +248,21 @@ export default function TrainingDetailPage() {
     };
   }, [isConfirmOpen]);
 
-  const levels = (training?.levels ?? []).slice().sort((a, b) => a.levelIndex - b.levelIndex);
+  const levels = (training?.levels || []).slice().sort((a, b) => a.levelIndex - b.levelIndex);
   const isAuto = training?.creationMode === 'AUTO';
   const isManual = training?.creationMode === 'MANUAL';
 
   const normalizeDraft = (plan: AiPlan): AiPlan => {
     return {
       ...plan,
-      globalConstraints: plan.globalConstraints ?? {},
+      globalConstraints: plan.globalConstraints || {},
       levels: plan.levels.map((level) => ({
         ...level,
-        outcomes: level.outcomes ?? [],
+        outcomes: level.outcomes || [],
         sessions: level.sessions.map((session) => ({
           ...session,
-          materials: session.materials ?? [],
-          accessibilityNotes: session.accessibilityNotes ?? []
+          materials: session.materials || [],
+          accessibilityNotes: session.accessibilityNotes || []
         }))
       }))
     };
@@ -286,7 +286,7 @@ export default function TrainingDetailPage() {
     setAiPromptError(null);
     setAiLoading(true);
     setAiServerError(null);
-    setAiSummaryErrors([]);
+    setAiResumeErrors([]);
     setAiFieldErrors({});
     try {
       const payload = {
@@ -304,10 +304,10 @@ export default function TrainingDetailPage() {
     }
   };
 
-  const handleCancelDraft = () => {
+  const handleAnnulerDraft = () => {
     setAiDraft(null);
     setAiFieldErrors({});
-    setAiSummaryErrors([]);
+    setAiResumeErrors([]);
     setAiServerError(null);
   };
 
@@ -342,7 +342,7 @@ export default function TrainingDetailPage() {
           errors[`levels.${level.levelIndex}.sessions.${session.sessionIndex}.durationMin`] = 'Duration must be 30-240 minutes.';
         }
         if (!session.accessibilityNotes || session.accessibilityNotes.length < 2) {
-          errors[`levels.${level.levelIndex}.sessions.${session.sessionIndex}.accessibilityNotes`] = 'Add at least 2 accessibility notes.';
+          errors[`levels.${level.levelIndex}.sessions.${session.sessionIndex}.accessibilityNotes`] = 'Ajoutez au moins 2 notes d\'accessibilité.';
         }
       });
     });
@@ -350,15 +350,15 @@ export default function TrainingDetailPage() {
     return { errors, summary };
   };
 
-  const handleApplyDraft = async () => {
+  const handleAppliquerDraft = async () => {
     if (!aiDraft) return;
     const validation = validateDraft(aiDraft);
     setAiFieldErrors(validation.errors);
-    setAiSummaryErrors(validation.summary);
+    setAiResumeErrors(validation.summary);
     if (Object.keys(validation.errors).length > 0 || validation.summary.length > 0) {
       return;
     }
-    setAiApplying(true);
+    setAiAppliquering(true);
     setAiServerError(null);
     try {
       await trainingService.applyAiPlan(trainingId, aiDraft);
@@ -368,7 +368,7 @@ export default function TrainingDetailPage() {
     } catch (error: any) {
       setAiServerError(handleApiError(error));
     } finally {
-      setAiApplying(false);
+      setAiAppliquering(false);
     }
   };
 
@@ -442,7 +442,7 @@ export default function TrainingDetailPage() {
     if (missingSessions.length === 0) return;
     setActionError(null);
     setActionMessage(null);
-    setActiveSessionCreateLevel(level.id);
+    setActifSessionCreateLevel(level.id);
     try {
       await sessionService.createForLevel(level.id, {
         sessionIndex: missingSessions[0]
@@ -452,7 +452,7 @@ export default function TrainingDetailPage() {
     } catch (error: any) {
       setActionError(handleApiError(error));
     } finally {
-      setActiveSessionCreateLevel(null);
+      setActifSessionCreateLevel(null);
     }
   };
 
@@ -464,9 +464,9 @@ export default function TrainingDetailPage() {
     setEditingSessionId(session.id);
     setScheduleDraft({
       startAt: toInputDateTime(session.startAt),
-      durationMin: `${session.durationMin ?? 120}`,
-      location: session.location ?? '',
-      status: session.status ?? 'PLANNED'
+      durationMin: `${session.durationMin || 120}`,
+      location: session.location || '',
+      status: session.status || 'PLANNED'
     });
     setScheduleErrors({});
   };
@@ -496,7 +496,7 @@ export default function TrainingDetailPage() {
       errors.durationMin = 'Duration must be a positive number.';
     }
     if (!scheduleDraft.status) {
-      errors.status = 'Status is required.';
+      errors.status = 'Le statut est requis.';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -528,8 +528,8 @@ export default function TrainingDetailPage() {
     return (
       <div className="min-h-screen bg-slate-50">
         <Navbar />
-        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <p className="text-sm text-gray-500">Loading training details…</p>
+        <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <p className="text-sm text-gray-500">Chargement des d?tails de la formation…</p>
         </main>
       </div>
     );
@@ -539,7 +539,7 @@ export default function TrainingDetailPage() {
     return (
       <div className="min-h-screen bg-slate-50">
         <Navbar />
-        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <Card>
             <p className="text-sm text-red-600">{loadError || 'Training not found.'}</p>
             <div className="mt-4">
@@ -553,19 +553,19 @@ export default function TrainingDetailPage() {
     );
   }
 
-  const levelsCreated = levels.length;
+  const levelsCre = levels.length;
 
   return (
     <div className="min-h-screen bg-slate-50">
       <Navbar />
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
+      <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
         <div className="flex flex-col gap-3">
           <Button type="button" variant="outline" onClick={() => navigate('/trainings')}>
             Back to formations
           </Button>
           <div>
             <p className="text-sm font-semibold text-teal-700 tracking-wide uppercase">Formation detail</p>
-            <h1 className="text-3xl font-bold text-gray-900 mt-2">{training.title}</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mt-2" tabIndex={-1}>{training.title}</h1>
             {training.description && (
               <p className="text-gray-600 mt-2 max-w-3xl">{training.description}</p>
             )}
@@ -616,7 +616,7 @@ export default function TrainingDetailPage() {
             <div>
               <p className="text-xs uppercase text-gray-500">Levels created</p>
               <p className="text-sm font-semibold text-gray-900">
-                {levelsCreated}/{TOTAL_LEVELS}
+                {levelsCre}/{TOTAL_LEVELS}
               </p>
             </div>
           </div>
@@ -627,7 +627,7 @@ export default function TrainingDetailPage() {
             <div className="flex flex-col gap-2">
               <h2 className="text-lg font-semibold text-gray-900">AI Assist (AUTO only)</h2>
               <p className="text-sm text-gray-600">
-                The assistant creates a draft plan only. You can edit it, then click Apply to write to the database.
+                L'assistant cr?e uniquement un brouillon. Vous pouvez le modifier, puis cliquer sur Appliquer pour l'enregistrer dans la base de donn?es.
               </p>
             </div>
 
@@ -753,8 +753,8 @@ export default function TrainingDetailPage() {
                     <Button type="button" variant="outline" onClick={handleGenerateDraft} disabled={aiLoading}>
                       Regenerate
                     </Button>
-                    <Button type="button" variant="outline" onClick={handleCancelDraft}>
-                      Cancel draft
+                    <Button type="button" variant="outline" onClick={handleAnnulerDraft}>
+                      Annuler le brouillon
                     </Button>
                   </>
                 )}
@@ -772,15 +772,15 @@ export default function TrainingDetailPage() {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Draft plan</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Edit the draft before applying it. Changes are saved only when you click Apply.
+                    Modifiez le brouillon avant d'appliquer. Les changements sont enregistr?s uniquement apr?s avoir cliqu? sur Appliquer.
                   </p>
                 </div>
 
-                {aiSummaryErrors.length > 0 && (
+                {aiResumeErrors.length > 0 && (
                   <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
                     <p className="font-semibold mb-1">Please fix the following issues:</p>
                     <ul className="list-disc list-inside">
-                      {aiSummaryErrors.map((error, index) => (
+                      {aiResumeErrors.map((error, index) => (
                         <li key={`${error}-${index}`}>{error}</li>
                       ))}
                     </ul>
@@ -1020,7 +1020,7 @@ export default function TrainingDetailPage() {
                                 </div>
                                 <div className="sm:col-span-2">
                                   <label className="block text-xs font-medium text-gray-700">
-                                    Accessibility notes <span className="text-red-600">(min 2)</span>
+                                    Notes d'accessibilit? <span className="text-red-600">(min 2)</span>
                                   </label>
                                   <div className="mt-2 space-y-2">
                                     {session.accessibilityNotes.map((note, noteIndex) => (
@@ -1086,11 +1086,11 @@ export default function TrainingDetailPage() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Button type="button" onClick={handleApplyDraft} disabled={aiApplying}>
-                    {aiApplying ? 'Applying…' : 'Apply'}
+                  <Button type="button" onClick={handleAppliquerDraft} disabled={aiAppliquering}>
+                    {aiAppliquering ? 'Appliquering…' : 'Appliquer'}
                   </Button>
-                  <Button type="button" variant="outline" onClick={handleCancelDraft}>
-                    Cancel draft
+                  <Button type="button" variant="outline" onClick={handleAnnulerDraft}>
+                    Annuler le brouillon
                   </Button>
                 </div>
               </div>
@@ -1127,7 +1127,7 @@ export default function TrainingDetailPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Step A: Create levels</h2>
                   <p className="text-sm text-gray-600 mt-1">
-                    Progress: {levelsCreated}/{TOTAL_LEVELS} levels created.
+                    Progress: {levelsCre}/{TOTAL_LEVELS} levels created.
                   </p>
                 </div>
                 <Button
@@ -1151,7 +1151,7 @@ export default function TrainingDetailPage() {
                     >
                       <p className="font-semibold text-gray-900">Level {levelIndex}</p>
                       <p className="text-xs text-gray-600 mt-1">
-                        {level ? 'Created' : 'Not created yet'}
+                        {level ? 'Cr?' : 'Not created yet'}
                       </p>
                     </div>
                   );
@@ -1183,7 +1183,7 @@ export default function TrainingDetailPage() {
                             Level {level.levelIndex}: {createdCount}/{TOTAL_SESSIONS} sessions created
                           </p>
                           <p className="text-xs text-gray-500">
-                            Next missing session: {missingSessions[0] ? `#${missingSessions[0]}` : 'None'}
+                            Prochaine s?ance manquante : {missingSessions[0] ? `#${missingSessions[0]}` : 'Aucune'}
                           </p>
                         </div>
                         <Button
@@ -1216,7 +1216,7 @@ export default function TrainingDetailPage() {
               <p className="text-sm text-gray-500">No levels yet.</p>
             )}
             {levels.map((level) => {
-              const isExpanded = expandedLevels[level.id] ?? false;
+              const isExpanded = expandedLevels[level.id] || false;
               const missingSessions = getMissingSessionIndices(level);
               return (
                 <div key={level.id} className="rounded-lg border border-gray-200 bg-white">
@@ -1286,7 +1286,7 @@ export default function TrainingDetailPage() {
                                   Start: {formatDateTime(session.startAt)}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">
-                                  Duration: {session.durationMin ?? 120} min
+                                  Duration: {session.durationMin || 120} min
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">
                                   Location: {session.location || 'Not set'}
@@ -1382,10 +1382,10 @@ export default function TrainingDetailPage() {
                                 </div>
                                 <div className="sm:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
                                   <Button type="button" variant="outline" onClick={cancelEditingSession}>
-                                    Cancel
+                                    Annuler
                                   </Button>
                                   <Button type="submit" disabled={isScheduleSaving}>
-                                    {isScheduleSaving ? 'Saving…' : 'Save schedule'}
+                                    {isScheduleSaving ? 'Saving…' : 'Enregistrer le planning'}
                                   </Button>
                                 </div>
                               </form>
@@ -1412,7 +1412,7 @@ export default function TrainingDetailPage() {
             </p>
             <div className="mt-6 flex flex-col sm:flex-row sm:justify-end gap-3">
               <Button type="button" variant="outline" onClick={() => setIsConfirmOpen(false)}>
-                Cancel
+                Annuler
               </Button>
               <Button type="button" onClick={handleGenerateStructure} disabled={isGenerating}>
                 {isGenerating ? 'Generating…' : 'Confirm and generate'}

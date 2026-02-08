@@ -1,5 +1,5 @@
 
-export const studentAttendanceRecords = [
+export const studentPresenceRecords = [
   // Student 1 - Emma Johnson
   { id: 1, studentId: 1, date: "2024-01-15", level: 1, sessionNumber: 1, sessionTitle: "Introduction to Web Technologies", status: "present" },
   { id: 2, studentId: 1, date: "2024-01-17", level: 1, sessionNumber: 2, sessionTitle: "HTML5 and Semantic Markup", status: "present" },

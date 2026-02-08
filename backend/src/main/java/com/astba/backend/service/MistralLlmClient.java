@@ -56,7 +56,7 @@ public class MistralLlmClient {
                                   String language,
                                   String promptText,
                                   AiPlanConstraints constraints) {
-        if (properties.isStubEnabled() || properties.getApiKey() == null || properties.getApiKey().isBlank()) {
+        if (properties.isStubEnabled()) {
             try {
                 JsonNode stub = stubFactory.buildStub(language, promptText, constraints);
                 return objectMapper.writeValueAsString(stub);
@@ -64,6 +64,10 @@ public class MistralLlmClient {
                 throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "AI_STUB_FAILED",
                         "Unable to generate stub plan");
             }
+        }
+        if (properties.getApiKey() == null || properties.getApiKey().isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AI_PROVIDER_NOT_CONFIGURED",
+                    "Mistral API key is missing. Set MISTRAL_API_KEY.");
         }
 
         ObjectNode payload = objectMapper.createObjectNode();
@@ -84,12 +88,22 @@ public class MistralLlmClient {
         jsonSchema.put("name", "astba_ai_training_plan_v1");
         jsonSchema.set("schema", schemaNode);
 
-        String responseBody = webClient.post()
-                .uri(CHAT_PATH)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.getApiKey())
-                .bodyValue(payload)
-                .exchangeToMono(this::handleResponse)
-                .block(Duration.ofMillis(properties.getTimeoutMs()));
+        String responseBody;
+        try {
+            responseBody = webClient.post()
+                    .uri(CHAT_PATH)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.getApiKey())
+                    .bodyValue(payload)
+                    .exchangeToMono(this::handleResponse)
+                    .block(Duration.ofMillis(properties.getTimeoutMs()));
+        } catch (IllegalStateException ex) {
+            String message = ex.getMessage() != null ? ex.getMessage() : "";
+            if (message.contains("Timeout on blocking read")) {
+                throw new ApiException(HttpStatus.GATEWAY_TIMEOUT, "AI_TIMEOUT",
+                        "LLM request timed out. Try again or reduce prompt size.");
+            }
+            throw ex;
+        }
 
         if (responseBody == null || responseBody.isBlank()) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_EMPTY_RESPONSE",

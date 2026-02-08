@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { userService } from '../../../services/user.service';
 
 interface Trainer {
@@ -18,6 +18,9 @@ interface NewConversationModalProps {
 export default function NewConversationModal({ isOpen, onClose, onSelectTrainer }: NewConversationModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [trainers, setTrainers] = useState<Trainer[]>([]);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const lastActifElementRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const loadTrainers = async () => {
@@ -51,12 +54,61 @@ export default function NewConversationModal({ isOpen, onClose, onSelectTrainer 
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const filteredTrainers = trainers.filter(trainer =>
     trainer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     trainer.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  useEffect(() => {
+    if (isOpen) {
+      lastActifElementRef.current = document.activeElement as HTMLElement | null;
+    } else if (lastActifElementRef.current) {
+      lastActifElementRef.current.focus();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const dialog = modalRef.current;
+    if (!dialog) return;
+
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+
+    dialog.addEventListener('keydown', handleKeyDown);
+    if (closeButtonRef.current) {
+      closeButtonRef.current.focus();
+    } else {
+      first?.focus();
+    }
+
+    return () => dialog.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
 
   const handleSelectTrainer = (trainerId: string) => {
     onSelectTrainer(trainerId);
@@ -64,21 +116,32 @@ export default function NewConversationModal({ isOpen, onClose, onSelectTrainer 
     setSearchQuery('');
   };
 
+  const handleClose = () => {
+    onClose();
+    setSearchQuery('');
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={handleClose}>
       <div 
+        ref={modalRef}
         className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-conversation-title"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Nouvelle conversation</h2>
+            <h2 id="new-conversation-title" className="text-2xl font-bold text-gray-900">Nouvelle conversation</h2>
             <p className="text-sm text-gray-600 mt-1">Sélectionnez un utilisateur pour démarrer une conversation</p>
           </div>
           <button
-            onClick={onClose}
+            ref={closeButtonRef}
+            onClick={handleClose}
             className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors duration-200 cursor-pointer"
+            aria-label="Fermer la fen?tre"
           >
             <i className="ri-close-line text-2xl" aria-hidden="true"></i>
           </button>
@@ -86,12 +149,14 @@ export default function NewConversationModal({ isOpen, onClose, onSelectTrainer 
 
         {/* Search */}
         <div className="p-6 border-b border-gray-200">
+          <label htmlFor="trainer-search" className="sr-only">Rechercher un utilisateur</label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
               <i className="ri-search-line text-gray-400" aria-hidden="true"></i>
             </div>
             <input
               type="text"
+              id="trainer-search"
               placeholder="Rechercher un utilisateur..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -159,7 +224,7 @@ export default function NewConversationModal({ isOpen, onClose, onSelectTrainer 
           <div className="flex items-center justify-between text-sm text-gray-600">
             <span>{filteredTrainers.length} utilisateur{filteredTrainers.length > 1 ? 's' : ''} disponible{filteredTrainers.length > 1 ? 's' : ''}</span>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium cursor-pointer whitespace-nowrap"
             >
               Annuler

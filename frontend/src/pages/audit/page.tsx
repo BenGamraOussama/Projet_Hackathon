@@ -33,12 +33,13 @@ export default function AuditLogs() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Audit & Traçabilite</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2" tabIndex={-1}>Audit & Traçabilite</h1>
           <p className="text-base text-gray-600">Dernieres actions sensibles dans le systeme</p>
         </div>
 
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Journal d'audit</h2>
         <Card>
           {isLoading ? (
             <div className="text-center py-12">

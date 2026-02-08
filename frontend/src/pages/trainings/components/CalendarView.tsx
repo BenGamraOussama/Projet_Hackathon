@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import Badge from '../../../components/base/Badge';
 import Button from '../../../components/base/Button';
 
@@ -12,6 +12,7 @@ interface CalendarSession {
   sessionNumber: number;
   title: string;
   date: string;
+  dateTime: Date | null;
   duration: number;
   completed: boolean;
   trainingName: string;
@@ -36,22 +37,26 @@ export default function CalendarView({ trainings = [], sessions = [] }: { traini
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [selectedSession, setSelectedSession] = useState<CalendarSession | null>(null);
   const [filterTraining, setFilterTraining] = useState<number | null>(null);
+  const sessionModalRef = useRef<HTMLDivElement>(null);
+  const sessionCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
 
   const allSessions: CalendarSession[] = useMemo(() => {
     return sessions.map((session: any) => {
-      const trainingId = session.training?.id ?? session.trainingId;
+      const trainingId = session.training?.id ? session.trainingId;
       const training = trainings.find(t => t.id === trainingId);
-      const rawDate = session.startAt ?? session.date;
+      const rawDate = session.startAt ? session.date;
       const sessionDate = rawDate ? new Date(rawDate) : null;
       const completed = sessionDate ? sessionDate < new Date() : false;
       return {
         id: session.id,
         trainingId,
-        level: session.levelNumber ?? session.level ?? 1,
-        sessionNumber: session.sessionNumber ?? 1,
-        title: session.title ?? `Session ${session.sessionNumber ?? session.id}`,
+        level: session.levelNumber ? session.level ? 1,
+        sessionNumber: session.sessionNumber ? 1,
+        title: session.title ? `Session ${session.sessionNumber ? session.id}`,
         date: sessionDate ? sessionDate.toISOString().split('T')[0] : '',
-        duration: session.durationMin ?? session.duration ?? 120,
+        dateTime: sessionDate,
+        duration: session.durationMin ? session.duration ? 120,
         completed,
         trainingName: training?.name || 'Unknown Training',
         trainingColor: getTrainingColors(trainingId).bg,
@@ -63,6 +68,60 @@ export default function CalendarView({ trainings = [], sessions = [] }: { traini
     if (filterTraining === null) return allSessions;
     return allSessions.filter(s => s.trainingId === filterTraining);
   }, [allSessions, filterTraining]);
+
+  const handleOpenSession = (session: CalendarSession, event?: React.MouseEvent<HTMLElement>) => {
+    lastActiveElementRef.current = (event?.currentTarget ? document.activeElement) as HTMLElement | null;
+    setSelectedSession(session);
+  };
+
+  const handleCloseSession = () => {
+    setSelectedSession(null);
+    const activeElement = lastActiveElementRef.current;
+    if (activeElement) {
+      activeElement.focus();
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedSession) return;
+    const dialog = sessionModalRef.current;
+    if (!dialog) return;
+
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleCloseSession();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+
+    dialog.addEventListener('keydown', handleKeyDown);
+    if (sessionCloseButtonRef.current) {
+      sessionCloseButtonRef.current.focus();
+    } else {
+      first?.focus();
+    }
+
+    return () => dialog.removeEventListener('keydown', handleKeyDown);
+  }, [selectedSession]);
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -207,7 +266,7 @@ export default function CalendarView({ trainings = [], sessions = [] }: { traini
                     return (
                       <button
                         key={session.id}
-                        onClick={() => setSelectedSession(session)}
+                        onClick={(event) => handleOpenSession(session, event)}
                         className={`w-full text-left px-2 py-1 rounded text-xs truncate border-l-4 ${colors.bg} ${colors.border} ${colors.text} hover:opacity-80 transition-opacity cursor-pointer`}
                         title={session.title}
                       >
@@ -274,8 +333,7 @@ export default function CalendarView({ trainings = [], sessions = [] }: { traini
               {weekDays.map((day, dayIndex) => {
                 const sessions = getSessionsForDate(day);
                 const hourSessions = sessions.filter(s => {
-                  // Simulate session times based on session number
-                  const sessionHour = 8 + (s.sessionNumber - 1) * 2;
+                  const sessionHour = s.dateTime ? s.dateTime.getHours() : 8 + (s.sessionNumber - 1) * 2;
                   return sessionHour === hour;
                 });
                 
@@ -291,7 +349,7 @@ export default function CalendarView({ trainings = [], sessions = [] }: { traini
                       return (
                         <button
                           key={session.id}
-                          onClick={() => setSelectedSession(session)}
+                          onClick={(event) => handleOpenSession(session, event)}
                           className={`w-full text-left p-2 rounded text-xs border-l-4 ${colors.bg} ${colors.border} ${colors.text} hover:opacity-80 transition-opacity cursor-pointer mb-1`}
                         >
                           <div className="font-semibold truncate">{session.title}</div>
@@ -337,16 +395,18 @@ export default function CalendarView({ trainings = [], sessions = [] }: { traini
           ) : (
             sessions.map(session => {
               const colors = getTrainingColors(session.trainingId);
-              const sessionHour = 8 + (session.sessionNumber - 1) * 2;
+              const sessionHour = session.dateTime ? session.dateTime.getHours() : 8 + (session.sessionNumber - 1) * 2;
+              const sessionMinute = session.dateTime ? session.dateTime.getMinutes() : 0;
+              const formattedTime = `${String(sessionHour).padStart(2, '0')}:${String(sessionMinute).padStart(2, '0')}`;
               
               return (
                 <button
                   key={session.id}
-                  onClick={() => setSelectedSession(session)}
+                  onClick={(event) => handleOpenSession(session, event)}
                   className={`w-full text-left p-4 hover:bg-gray-50 transition-colors cursor-pointer flex items-start gap-4`}
                 >
                   <div className="text-sm text-gray-500 w-16 flex-shrink-0 pt-1">
-                    {sessionHour}:00
+                    {formattedTime}
                   </div>
                   <div className={`flex-1 p-4 rounded-lg border-l-4 ${colors.bg} ${colors.border}`}>
                     <div className="flex items-start justify-between gap-4">
@@ -561,12 +621,12 @@ export default function CalendarView({ trainings = [], sessions = [] }: { traini
         >
           <div 
             className="fixed inset-0 bg-black/50 transition-opacity"
-            onClick={() => setSelectedSession(null)}
+            onClick={handleCloseSession}
             aria-hidden="true"
           ></div>
           
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="relative w-full max-w-lg bg-white rounded-xl shadow-xl transform transition-all">
+            <div ref={sessionModalRef} className="relative w-full max-w-lg bg-white rounded-xl shadow-xl transform transition-all">
               {/* Color bar */}
               <div className={`h-2 rounded-t-xl ${getTrainingColors(selectedSession.trainingId).border.replace('border-l-', 'bg-')}`}></div>
               
@@ -579,7 +639,8 @@ export default function CalendarView({ trainings = [], sessions = [] }: { traini
                   <p className="text-sm text-gray-500 mt-1">{selectedSession.trainingName}</p>
                 </div>
                 <button
-                  onClick={() => setSelectedSession(null)}
+                  ref={sessionCloseButtonRef}
+                  onClick={handleCloseSession}
                   className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
                   aria-label="Fermer"
                 >
@@ -595,11 +656,23 @@ export default function CalendarView({ trainings = [], sessions = [] }: { traini
                     <div>
                       <p className="text-xs text-gray-500">Date</p>
                       <p className="text-sm font-medium text-gray-900">
-                        {new Date(selectedSession.date).toLocaleDateString('fr-FR', {
+                        {(selectedSession.dateTime ? new Date(selectedSession.date)).toLocaleDateString('fr-FR', {
                           weekday: 'long',
                           day: 'numeric',
                           month: 'long',
                           year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <i className="ri-time-line text-xl text-gray-400" aria-hidden="true"></i>
+                    <div>
+                      <p className="text-xs text-gray-500">Heure</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {(selectedSession.dateTime ? new Date(selectedSession.date)).toLocaleTimeString('fr-FR', {
+                          hour: '2-digit',
+                          minute: '2-digit'
                         })}
                       </p>
                     </div>
@@ -637,7 +710,7 @@ export default function CalendarView({ trainings = [], sessions = [] }: { traini
               
               {/* Footer */}
               <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-                <Button variant="outline" onClick={() => setSelectedSession(null)}>
+                <Button variant="outline" onClick={handleCloseSession}>
                   Fermer
                 </Button>
                 <Button variant="primary">

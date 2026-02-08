@@ -9,6 +9,9 @@ public class UpdateUserRequest {
     private String role;
     private String firstName;
     private String lastName;
+    private String phone;
+    private String address;
+    private String careerDescription;
     private Boolean generatePassword;
     private Boolean sendEmail;
 }

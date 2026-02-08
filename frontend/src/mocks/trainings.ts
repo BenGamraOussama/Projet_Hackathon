@@ -8,8 +8,8 @@ export const trainingsData = [
     status: "active",
     totalLevels: 4,
     sessionsPerLevel: 6,
-    enrolledStudents: 12,
-    completedStudents: 2
+    enrolledEleves: 12,
+    completedEleves: 2
   },
   {
     id: 2,
@@ -20,8 +20,8 @@ export const trainingsData = [
     status: "active",
     totalLevels: 4,
     sessionsPerLevel: 6,
-    enrolledStudents: 8,
-    completedStudents: 0
+    enrolledEleves: 8,
+    completedEleves: 0
   },
   {
     id: 3,
@@ -32,8 +32,8 @@ export const trainingsData = [
     status: "active",
     totalLevels: 4,
     sessionsPerLevel: 6,
-    enrolledStudents: 15,
-    completedStudents: 1
+    enrolledEleves: 15,
+    completedEleves: 1
   },
   {
     id: 4,
@@ -44,8 +44,8 @@ export const trainingsData = [
     status: "upcoming",
     totalLevels: 4,
     sessionsPerLevel: 6,
-    enrolledStudents: 0,
-    completedStudents: 0
+    enrolledEleves: 0,
+    completedEleves: 0
   }
 ];
 

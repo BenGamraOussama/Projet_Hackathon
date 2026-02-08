@@ -29,7 +29,7 @@ export default function Messages() {
         // This is a simplified grouping logic. Ideally we need user details for names/avatars.
         // For demo, we might fall back to ID or fetch user details.
 
-        const isRead = msg.read ?? msg.isRead ?? false;
+        const isRead = msg.read || msg.isRead || false;
         if (!conversationMap.has(participantId)) {
           conversationMap.set(participantId, {
             id: participantId, // using participantId as conversation Id for simplicity
@@ -101,12 +101,12 @@ export default function Messages() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Messagerie</h1>
+              <h1 className="text-3xl font-bold text-gray-900" tabIndex={-1}>Messagerie</h1>
               <p className="text-gray-600 mt-1">
                 {totalUnreadCount > 0 ? (
                   <span className="flex items-center gap-2">
@@ -170,6 +170,7 @@ export default function Messages() {
         </div>
 
         {/* Conversations List */}
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Conversations</h2>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           {filteredConversations.length === 0 ? (
             <div className="text-center py-16">
@@ -232,7 +233,8 @@ export default function Messages() {
         </div>
 
         {/* Stats */}
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <h2 className="text-lg font-semibold text-gray-900 mt-8 mb-3">Statistiques</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 flex items-center justify-center bg-teal-100 rounded-lg">
@@ -269,7 +271,7 @@ export default function Messages() {
             </div>
           </div>
         </div>
-      </div>
+      </main>
 
       {/* New Conversation Modal */}
       <NewConversationModal

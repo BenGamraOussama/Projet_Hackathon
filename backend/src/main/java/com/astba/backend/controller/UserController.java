@@ -1,13 +1,18 @@
 package com.astba.backend.controller;
 
 import com.astba.backend.dto.CreateUserRequest;
+import com.astba.backend.dto.PendingUserResponse;
+import com.astba.backend.dto.UpdateUserStatusRequest;
 import com.astba.backend.dto.UpdateUserRequest;
 import com.astba.backend.dto.UserCreateResponse;
 import com.astba.backend.dto.UserResponse;
 import com.astba.backend.entity.User;
 import com.astba.backend.repository.UserRepository;
 import com.astba.backend.service.AuditService;
+import com.astba.backend.service.MaxStudentsReachedException;
 import com.astba.backend.service.EmailService;
+import com.astba.backend.service.UserApprovalResult;
+import com.astba.backend.service.UserApprovalService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,15 +33,18 @@ public class UserController {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final AuditService auditService;
+    private final UserApprovalService userApprovalService;
 
     public UserController(UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             EmailService emailService,
-            AuditService auditService) {
+            AuditService auditService,
+            UserApprovalService userApprovalService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
         this.auditService = auditService;
+        this.userApprovalService = userApprovalService;
     }
 
     @GetMapping("/me")
@@ -62,6 +70,77 @@ public class UserController {
                     .collect(Collectors.toList());
         }
         return users.stream().map(UserResponse::new).collect(Collectors.toList());
+    }
+
+    @GetMapping("/pending")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<PendingUserResponse> getPendingUsers(@RequestParam(required = false) String role) {
+        List<User> users = userRepository.findAll().stream()
+                .filter(user -> "PENDING".equalsIgnoreCase(user.getStatus()))
+                .filter(user -> role == null || role.isBlank() || role.equalsIgnoreCase(user.getRole()))
+                .collect(Collectors.toList());
+        return users.stream().map(PendingUserResponse::new).collect(Collectors.toList());
+    }
+
+    @GetMapping("/pending/count")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> getPendingCount(@RequestParam(required = false) String role) {
+        long count;
+        if (role == null || role.isBlank()) {
+            count = userRepository.countByStatus("PENDING");
+        } else {
+            count = userRepository.countByRoleAndStatus(role.trim().toUpperCase(), "PENDING");
+        }
+        return ResponseEntity.ok(java.util.Map.of("count", count));
+    }
+
+    @GetMapping("/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<PendingUserResponse> getUsersByStatus(@RequestParam String status,
+            @RequestParam(required = false) String role) {
+        if (status == null || status.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status is required");
+        }
+        String normalizedStatus = status.trim().toUpperCase();
+        if (!"APPROVED".equals(normalizedStatus) && !"REJECTED".equals(normalizedStatus) && !"PENDING".equals(normalizedStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status");
+        }
+        List<User> users;
+        if (role == null || role.isBlank()) {
+            users = userRepository.findByStatus(normalizedStatus);
+        } else {
+            users = userRepository.findByStatusAndRole(normalizedStatus, role.trim().toUpperCase());
+        }
+        return users.stream().map(PendingUserResponse::new).collect(Collectors.toList());
+    }
+
+    @PostMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> updateUserStatus(@PathVariable Long id, @RequestBody UpdateUserStatusRequest request) {
+        if (id == null || request == null || request.getStatus() == null) {
+            return ResponseEntity.badRequest().body("User id and status are required");
+        }
+        String status = request.getStatus().trim().toUpperCase();
+        if (!"APPROVED".equals(status) && !"REJECTED".equals(status)) {
+            return ResponseEntity.badRequest().body("Invalid status");
+        }
+
+        return userRepository.findById(id)
+                .map(user -> {
+                    try {
+                        UserApprovalResult result = userApprovalService.updateStatus(user, status, false);
+                        User saved = result.getUser();
+                        if ("APPROVED".equals(status)) {
+                            auditService.log("APPROVE_USER", "User", String.valueOf(saved.getId()), "User approved");
+                        } else {
+                            auditService.log("UPDATE_USER_STATUS", "User", String.valueOf(saved.getId()), "Status set to " + status);
+                        }
+                        return ResponseEntity.ok(new UserResponse(saved));
+                    } catch (MaxStudentsReachedException ex) {
+                        return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+                    }
+                })
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found"));
     }
 
     @PostMapping
@@ -92,6 +171,7 @@ public class UserController {
         user.setLastName(request.getLastName());
         String role = normalizeRole(request.getRole());
         user.setRole(role);
+        user.setStatus("APPROVED");
 
         User saved = userRepository.save(user);
         boolean emailSent = false;
@@ -130,6 +210,15 @@ public class UserController {
                     }
                     if (request.getLastName() != null) {
                         target.setLastName(request.getLastName());
+                    }
+                    if (request.getPhone() != null) {
+                        target.setPhone(request.getPhone());
+                    }
+                    if (request.getAddress() != null) {
+                        target.setAddress(request.getAddress());
+                    }
+                    if (request.getCareerDescription() != null) {
+                        target.setCareerDescription(request.getCareerDescription());
                     }
                     if (request.getRole() != null && !request.getRole().isBlank()) {
                         target.setRole(normalizeRole(request.getRole()));
@@ -188,9 +277,12 @@ public class UserController {
         String normalized = role == null || role.isBlank() ? "FORMATEUR" : role.trim().toUpperCase();
         if (!"ADMIN".equals(normalized)
                 && !"RESPONSABLE".equals(normalized)
-                && !"FORMATEUR".equals(normalized)) {
+                && !"FORMATEUR".equals(normalized)
+                && !"ELEVE".equals(normalized)
+                && !"VISITEUR".equals(normalized)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role");
         }
         return normalized;
     }
 }
+

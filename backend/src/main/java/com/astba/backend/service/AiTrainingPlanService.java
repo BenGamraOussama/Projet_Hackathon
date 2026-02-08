@@ -13,6 +13,8 @@ import com.astba.backend.repository.SessionRepository;
 import com.astba.backend.repository.TrainingRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.lang.NonNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,7 @@ public class AiTrainingPlanService {
     private final TrainingDetailMapper trainingDetailMapper;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
+    private final AiPlanStubFactory stubFactory;
 
     public AiTrainingPlanService(AiPlanSchemaValidator schemaValidator,
             AiPromptTemplateService promptTemplateService,
@@ -50,7 +53,8 @@ public class AiTrainingPlanService {
             SessionRepository sessionRepository,
             TrainingDetailMapper trainingDetailMapper,
             AuditService auditService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            AiPlanStubFactory stubFactory) {
         this.schemaValidator = schemaValidator;
         this.promptTemplateService = promptTemplateService;
         this.mistralClient = mistralClient;
@@ -62,6 +66,7 @@ public class AiTrainingPlanService {
         this.trainingDetailMapper = trainingDetailMapper;
         this.auditService = auditService;
         this.objectMapper = objectMapper;
+        this.stubFactory = stubFactory;
     }
 
     public JsonNode generateDraftPlan(@NonNull Training training, @NonNull AiPlanRequest request, String actor) {
@@ -84,7 +89,19 @@ public class AiTrainingPlanService {
                 request.getPromptText(),
                 request.getConstraints());
 
-        JsonNode planNode = parseStrictJson(raw);
+        JsonNode planNode;
+        try {
+            planNode = parseStrictJson(raw);
+        } catch (ApiException ex) {
+            if (Objects.equals(ex.getCode(), "AI_PLAN_INVALID_OUTPUT")) {
+                JsonNode stub = stubFactory.buildStub(request.getLanguage(), request.getPromptText(), request.getConstraints());
+                auditService.log("AI_PLAN_FALLBACK_STUB", "Training", String.valueOf(training.getId()),
+                        "AI plan fallback to stub (invalid JSON)");
+                return stub;
+            }
+            throw ex;
+        }
+        planNode = normalizePlan(planNode, request);
         List<String> errors = schemaValidator.validate(planNode);
         if (!errors.isEmpty()) {
             String repairPrompt = promptTemplateService.getRepairPrompt();
@@ -96,11 +113,24 @@ public class AiTrainingPlanService {
                     request.getLanguage(),
                     request.getPromptText(),
                     request.getConstraints());
-            planNode = parseStrictJson(repaired);
+            try {
+                planNode = parseStrictJson(repaired);
+            } catch (ApiException ex) {
+                if (Objects.equals(ex.getCode(), "AI_PLAN_INVALID_OUTPUT")) {
+                    JsonNode stub = stubFactory.buildStub(request.getLanguage(), request.getPromptText(), request.getConstraints());
+                    auditService.log("AI_PLAN_FALLBACK_STUB", "Training", String.valueOf(training.getId()),
+                            "AI plan fallback to stub (repair invalid JSON)");
+                    return stub;
+                }
+                throw ex;
+            }
+            planNode = normalizePlan(planNode, request);
             errors = schemaValidator.validate(planNode);
             if (!errors.isEmpty()) {
-                throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_PLAN_INVALID_OUTPUT",
-                        "AI output did not match schema");
+                JsonNode stub = stubFactory.buildStub(request.getLanguage(), request.getPromptText(), request.getConstraints());
+                auditService.log("AI_PLAN_FALLBACK_STUB", "Training", String.valueOf(training.getId()),
+                        "AI plan fallback to stub (schema mismatch)");
+                return stub;
             }
         }
 
@@ -240,8 +270,140 @@ public class AiTrainingPlanService {
         try {
             return schemaValidator.parseJson(rawJson);
         } catch (IOException ex) {
+            JsonNode recovered = tryRecoverJson(rawJson);
+            if (recovered != null) {
+                return recovered;
+            }
             throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_PLAN_INVALID_OUTPUT",
                     "AI output was not valid JSON");
+        }
+    }
+
+    private JsonNode normalizePlan(JsonNode planNode, AiPlanRequest request) {
+        if (!(planNode instanceof ObjectNode)) {
+            return planNode;
+        }
+        ObjectNode root = (ObjectNode) planNode;
+        String language = request.getLanguage() != null ? request.getLanguage() : "fr";
+        root.put("version", "v1");
+        root.put("language", language);
+
+        ObjectNode trainingNode = getOrCreateObject(root, "training");
+        if (isBlank(trainingNode.get("title"))) {
+            trainingNode.put("title", defaultTrainingTitle(language));
+        }
+        if (isBlank(trainingNode.get("description"))) {
+            trainingNode.put("description", summarizePrompt(request.getPromptText()));
+        }
+
+        ArrayNode levelsNode = getOrCreateArray(root, "levels");
+        while (levelsNode.size() < 4) {
+            levelsNode.addObject();
+        }
+        while (levelsNode.size() > 4) {
+            levelsNode.remove(levelsNode.size() - 1);
+        }
+
+        for (int i = 0; i < 4; i++) {
+            JsonNode rawLevel = levelsNode.get(i);
+            ObjectNode levelNode = rawLevel instanceof ObjectNode ? (ObjectNode) rawLevel : levelsNode.insertObject(i);
+            levelNode.put("levelIndex", i + 1);
+            if (isBlank(levelNode.get("title"))) {
+                levelNode.put("title", "Niveau " + (i + 1));
+            }
+            ArrayNode outcomes = getOrCreateArray(levelNode, "outcomes");
+            if (outcomes.size() < 2) {
+                outcomes.removeAll();
+                outcomes.add("Comprendre les objectifs du niveau " + (i + 1));
+                outcomes.add("Realiser un livrable pratique pour le niveau " + (i + 1));
+            }
+
+            ArrayNode sessionsNode = getOrCreateArray(levelNode, "sessions");
+            while (sessionsNode.size() < 6) {
+                sessionsNode.addObject();
+            }
+            while (sessionsNode.size() > 6) {
+                sessionsNode.remove(sessionsNode.size() - 1);
+            }
+
+            for (int j = 0; j < 6; j++) {
+                JsonNode rawSession = sessionsNode.get(j);
+                ObjectNode sessionNode = rawSession instanceof ObjectNode ? (ObjectNode) rawSession : sessionsNode.insertObject(j);
+                sessionNode.put("sessionIndex", j + 1);
+                if (isBlank(sessionNode.get("title"))) {
+                    sessionNode.put("title", "Seance " + (j + 1));
+                }
+                if (isBlank(sessionNode.get("objective"))) {
+                    sessionNode.put("objective", "Objectif de la seance " + (j + 1) + " du niveau " + (i + 1));
+                }
+                if (!sessionNode.has("durationMin")) {
+                    sessionNode.put("durationMin", 120);
+                }
+                if (!sessionNode.has("modality")) {
+                    sessionNode.put("modality", "IN_PERSON");
+                }
+                if (!sessionNode.has("startAt")) {
+                    sessionNode.putNull("startAt");
+                }
+                if (!sessionNode.has("location")) {
+                    sessionNode.putNull("location");
+                }
+                getOrCreateArray(sessionNode, "materials");
+                ArrayNode notes = getOrCreateArray(sessionNode, "accessibilityNotes");
+                if (notes.size() < 2) {
+                    notes.removeAll();
+                    notes.add("Supports accessibles et lisibles.");
+                    notes.add("Alternatives visuelles et orales disponibles.");
+                }
+            }
+        }
+        return root;
+    }
+
+    private ObjectNode getOrCreateObject(ObjectNode parent, String field) {
+        JsonNode existing = parent.get(field);
+        if (existing instanceof ObjectNode) {
+            return (ObjectNode) existing;
+        }
+        return parent.putObject(field);
+    }
+
+    private ArrayNode getOrCreateArray(ObjectNode parent, String field) {
+        JsonNode existing = parent.get(field);
+        if (existing instanceof ArrayNode) {
+            return (ArrayNode) existing;
+        }
+        return parent.putArray(field);
+    }
+
+    private boolean isBlank(JsonNode node) {
+        return node == null || node.isMissingNode() || node.isNull() || node.asText().isBlank();
+    }
+
+    private String defaultTrainingTitle(String language) {
+        if ("ar".equalsIgnoreCase(language)) return "? ?? (??)";
+        if ("en".equalsIgnoreCase(language)) return "Training plan (draft)";
+        return "Plan de formation (brouillon)";
+    }
+
+    private String summarizePrompt(String promptText) {
+        if (promptText == null || promptText.isBlank()) {
+            return "Plan de formation structure par niveaux.";
+        }
+        String cleaned = promptText.replaceAll("\\s+", " ").trim();
+        return cleaned.length() > 180 ? cleaned.substring(0, 180) : cleaned;
+    }
+
+    private JsonNode tryRecoverJson(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) return null;
+        int start = rawJson.indexOf('{');
+        int end = rawJson.lastIndexOf('}');
+        if (start < 0 || end <= start) return null;
+        String slice = rawJson.substring(start, end + 1);
+        try {
+            return schemaValidator.parseJson(slice);
+        } catch (IOException ex) {
+            return null;
         }
     }
 
@@ -289,3 +451,4 @@ public class AiTrainingPlanService {
         }
     }
 }
+

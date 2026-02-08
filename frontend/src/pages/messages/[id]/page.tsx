@@ -37,7 +37,7 @@ export default function ConversationDetail() {
           )
           .map((msg) => ({
             ...msg,
-            isRead: msg.read ?? msg.isRead ?? false
+            isRead: msg.read || msg.isRead || false
           }))
           .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
         setConversationMessages(filtered);
@@ -105,7 +105,7 @@ export default function ConversationDetail() {
 
       const newMessage = {
         ...saved,
-        isRead: saved.read ?? saved.isRead ?? false
+        isRead: saved.read || saved.isRead || false
       };
 
       setConversationMessages((prev) => [...prev, newMessage]);
@@ -158,10 +158,10 @@ export default function ConversationDetail() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+        <main id="main-content" tabIndex={-1} className="flex items-center justify-center h-[calc(100vh-4rem)]">
           <div className="text-center">
             <i className="ri-error-warning-line text-6xl text-gray-400 mb-4" aria-hidden="true"></i>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Conversation introuvable</h2>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2" tabIndex={-1}>Conversation introuvable</h1>
             <button
               onClick={() => navigate('/messages')}
               className="mt-4 px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors duration-200 cursor-pointer whitespace-nowrap"
@@ -169,7 +169,7 @@ export default function ConversationDetail() {
               Retour aux messages
             </button>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -186,7 +186,7 @@ export default function ConversationDetail() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Navbar />
-      
+      <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col">
       <div className="bg-white border-b border-gray-200 sticky top-16 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
@@ -209,7 +209,7 @@ export default function ConversationDetail() {
               </div>
               
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{conversation.participantName}</h2>
+                <h1 className="text-lg font-semibold text-gray-900" tabIndex={-1}>{conversation.participantName}</h1>
                 <p className="text-sm text-gray-500">
                   {conversation.isOnline ? (
                     <span className="flex items-center gap-1">
@@ -241,10 +241,11 @@ export default function ConversationDetail() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {Object.entries(groupedMessages).map(([date, msgs]) => (
-            <div key={date}>
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <h2 className="sr-only">Messages</h2>
+            {Object.entries(groupedMessages).map(([date, msgs]) => (
+              <div key={date}>
               <div className="flex items-center justify-center my-6">
                 <div className="px-4 py-1.5 bg-gray-200 rounded-full">
                   <span className="text-xs font-medium text-gray-600">{date}</span>
@@ -318,9 +319,10 @@ export default function ConversationDetail() {
         </div>
       </div>
 
-      <div className="bg-white border-t border-gray-200 sticky bottom-0">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          {showEmojiPicker && (
+        <div className="bg-white border-t border-gray-200 sticky bottom-0">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <h2 className="sr-only">Composer un message</h2>
+            {showEmojiPicker && (
             <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
               <div className="flex flex-wrap gap-2">
                 {emojis.map((emoji, index) => (
@@ -375,6 +377,7 @@ export default function ConversationDetail() {
           </div>
         </div>
       </div>
+      </main>
     </div>
   );
 }

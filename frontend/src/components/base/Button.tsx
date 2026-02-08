@@ -1,4 +1,4 @@
-import { ButtonHTMLAttributes, ReactNode } from 'react';
+import { ButtonHTMLAttributes, ReactNode, forwardRef } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'outline';
@@ -8,7 +8,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode;
 }
 
-export default function Button({
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(({
   variant = 'primary',
   size = 'md',
   children,
@@ -17,7 +17,7 @@ export default function Button({
   className = '',
   disabled,
   ...props
-}: ButtonProps) {
+}, ref) => {
   const baseStyles = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer';
   
   const variants = {
@@ -36,6 +36,7 @@ export default function Button({
   
   return (
     <button
+      ref={ref}
       className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
       disabled={disabled}
       {...props}
@@ -44,4 +45,8 @@ export default function Button({
       {children}
     </button>
   );
-}
+});
+
+Button.displayName = 'Button';
+
+export default Button;

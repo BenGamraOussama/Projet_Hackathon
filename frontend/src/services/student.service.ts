@@ -29,5 +29,19 @@ export const studentService = {
     update: async (id, student) => {
         const response = await api.put(`/students/${id}`, student);
         return response.data;
+    },
+    getPending: async (query?: string) => {
+        const response = await api.get('/students/pending', { params: query ? { query } : undefined });
+        return response.data;
+    },
+
+    getPendingCount: async () => {
+        const response = await api.get('/students/pending/count');
+        return response.data;
+    },
+
+    updateStatus: async (id, status: 'APPROVED' | 'REJECTED') => {
+        const response = await api.post(`/students/${id}/status`, { status });
+        return response.data;
     }
 };

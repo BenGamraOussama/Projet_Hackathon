@@ -16,6 +16,26 @@ export const userService = {
     return response.data;
   },
 
+  getPending: async () => {
+    const response = await api.get('/users/pending');
+    return response.data;
+  },
+
+  getPendingCount: async (role?: string) => {
+    const response = await api.get('/users/pending/count', { params: role ? { role } : undefined });
+    return response.data;
+  },
+
+  getByStatus: async (status: string, role?: string) => {
+    const response = await api.get('/users/status', { params: { status, role } });
+    return response.data;
+  },
+
+  updateStatus: async (id, status) => {
+    const response = await api.post(`/users/${id}/status`, { status });
+    return response.data;
+  },
+
   createUser: async (payload) => {
     const response = await api.post('/users', {
       ...payload,

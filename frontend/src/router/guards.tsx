@@ -16,7 +16,7 @@ export function RequireRole({ role, roles, children }: { role?: string; roles?: 
   const userRole = authService.getUserRole();
   const allowedRoles = roles && roles.length > 0 ? roles : role ? [role] : [];
   if (allowedRoles.length > 0 && !allowedRoles.includes(userRole || '')) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={authService.getDefaultRoute(userRole || '')} replace />;
   }
   return children;
 }

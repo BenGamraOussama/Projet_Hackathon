@@ -33,10 +33,10 @@ export default function Reports() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Rapports & Indicateurs</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2" tabIndex={-1}>Rapports & Indicateurs</h1>
             <p className="text-base text-gray-600">Vue globale de l'avancement et des alertes</p>
           </div>
           <Button variant="outline" onClick={handlePrint}>
@@ -64,7 +64,7 @@ export default function Reports() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Eleves</p>
-                    <p className="text-2xl font-bold text-gray-900">{summary.totalStudents ?? 0}</p>
+                    <p className="text-2xl font-bold text-gray-900">{summary.totalEleves || 0}</p>
                   </div>
                 </div>
               </Card>
@@ -76,7 +76,7 @@ export default function Reports() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Formations</p>
-                    <p className="text-2xl font-bold text-gray-900">{summary.totalTrainings ?? 0}</p>
+                    <p className="text-2xl font-bold text-gray-900">{summary.totalTrainings || 0}</p>
                   </div>
                 </div>
               </Card>
@@ -87,8 +87,8 @@ export default function Reports() {
                     <i className="ri-calendar-line text-xl text-white" aria-hidden="true"></i>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Seances</p>
-                    <p className="text-2xl font-bold text-gray-900">{summary.totalSessions ?? 0}</p>
+                    <p className="text-sm text-gray-600">Séances</p>
+                    <p className="text-2xl font-bold text-gray-900">{summary.totalSessions || 0}</p>
                   </div>
                 </div>
               </Card>
@@ -100,7 +100,7 @@ export default function Reports() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Presences</p>
-                    <p className="text-2xl font-bold text-gray-900">{summary.totalAttendanceRecords ?? 0}</p>
+                    <p className="text-2xl font-bold text-gray-900">{summary.totalPresenceRecords || 0}</p>
                   </div>
                 </div>
               </Card>
@@ -112,7 +112,7 @@ export default function Reports() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Certificats</p>
-                    <p className="text-2xl font-bold text-gray-900">{summary.certificatesIssued ?? 0}</p>
+                    <p className="text-2xl font-bold text-gray-900">{summary.certificatesIssued || 0}</p>
                   </div>
                 </div>
               </Card>
@@ -123,8 +123,8 @@ export default function Reports() {
                     <i className="ri-medal-line text-xl text-white" aria-hidden="true"></i>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Formations terminees</p>
-                    <p className="text-2xl font-bold text-gray-900">{summary.trainingsCompleted ?? 0}</p>
+                    <p className="text-sm text-gray-600">Formations termin?es</p>
+                    <p className="text-2xl font-bold text-gray-900">{summary.trainingsCompleted || 0}</p>
                   </div>
                 </div>
               </Card>
@@ -134,35 +134,35 @@ export default function Reports() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <i className="ri-alert-line text-amber-600" aria-hidden="true"></i>
-                  Eleves a risque
+                  Eleves ? risque
                 </h2>
-                <Badge variant="warning">{summary.atRiskStudents?.length ?? 0}</Badge>
+                <Badge variant="warning">{summary.atRiskEleves?.length || 0}</Badge>
               </div>
 
-              {summary.atRiskStudents && summary.atRiskStudents.length > 0 ? (
+              {summary.atRiskEleves && summary.atRiskEleves.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="text-left text-sm text-gray-600 border-b border-gray-200">
                         <th className="py-3 pr-4">Eleve</th>
                         <th className="py-3 pr-4">Formation</th>
-                        <th className="py-3 pr-4">Assiduite</th>
+                        <th className="py-3 pr-4">Assiduit?</th>
                         <th className="py-3 pr-4">Absences</th>
-                        <th className="py-3">Seances manquantes</th>
+                        <th className="py-3">S?ances manquantes</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {summary.atRiskStudents.map((student: any) => (
+                      {summary.atRiskEleves.map((student: any) => (
                         <tr key={student.studentId} className="text-sm text-gray-700">
                           <td className="py-3 pr-4 font-medium text-gray-900">{student.name}</td>
                           <td className="py-3 pr-4">{student.trainingName || '-'}</td>
                           <td className="py-3 pr-4">
                             <Badge variant={student.attendanceRate >= 80 ? 'success' : student.attendanceRate >= 60 ? 'warning' : 'danger'}>
-                              {student.attendanceRate ?? 0}%
+                              {student.attendanceRate || 0}%
                             </Badge>
                           </td>
-                          <td className="py-3 pr-4">{student.absentCount ?? 0}</td>
-                          <td className="py-3">{student.missingSessions ?? 0}</td>
+                          <td className="py-3 pr-4">{student.absentCount || 0}</td>
+                          <td className="py-3">{student.missingSessions || 0}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -170,7 +170,7 @@ export default function Reports() {
                 </div>
               ) : (
                 <div className="text-center py-10 text-sm text-gray-600">
-                  Aucun eleve en alerte pour le moment.
+                  Aucun Eleve en alerte pour le moment.
                 </div>
               )}
             </Card>

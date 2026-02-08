@@ -33,3 +33,37 @@
   box-shadow: none !important;
   background-image: none !important;
 }
+
+body.has-sidebar #root {
+  min-height: 100vh;
+}
+
+@media (min-width: 768px) {
+  body.has-sidebar #root {
+    padding-left: 16rem;
+  }
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 60;
+  padding: 0.5rem 0.75rem;
+  background: #0f766e;
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  transform: translateY(-200%);
+  transition: transform 0.2s ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #0f766e;
+  outline-offset: 2px;
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../../components/feature/Navbar';
 import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
@@ -43,6 +43,7 @@ export default function Certification() {
   
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
   
   useEffect(() => {
     const loadData = async () => {
@@ -76,7 +77,7 @@ export default function Certification() {
         setSessions(sessionsData);
         setCertificates(certificatesData);
       } catch (error) {
-        console.error("Failed to load certification data", error);
+        console.error("Impossible de charger les donn?es de certification", error);
       }
     };
 
@@ -89,7 +90,7 @@ export default function Certification() {
   const getTrainingName = (trainingId: number) => {
     return trainings.find(t => t.id === trainingId)?.name
       || students.find(s => s.trainingId === trainingId)?.trainingName
-      || 'Unknown';
+      || 'Inconnu';
   };
 
   const getTrainingSessions = (trainingId: number) => {
@@ -110,15 +111,16 @@ export default function Certification() {
       return student.blockReason;
     }
     if (student.completedSessions < student.totalSessions) {
-      return `Missing ${student.totalSessions - student.completedSessions} sessions`;
+      return `Manque ${student.totalSessions - student.completedSessions} s?ances`;
     }
     if (student.attendanceRate < 80) {
-      return `Attendance rate below 80% (${student.attendanceRate}%)`;
+      return `Taux de pr?sence inf?rieur ? 80 % (${student.attendanceRate}%)`;
     }
-    return 'Requirements not met';
+    return 'Crit?res non atteints';
   };
   
-  const handleGenerateCertificate = (student: Student) => {
+  const handleGenerateCertificate = (student: Student, event?: React.MouseEvent<HTMLButtonElement>) => {
+    lastActiveElementRef.current = (event?.currentTarget ? document.activeElement : null) as HTMLElement | null;
     setSelectedStudent(student);
     const existing = certificates.find(
       (certificate) =>
@@ -155,7 +157,7 @@ export default function Certification() {
         return [...prev, response];
       });
     } catch (error: any) {
-      setToastMessage(error?.response?.data || 'Failed to generate certificate');
+      setToastMessage(error?.response?.data || 'Impossible de g?n?rer le certificat');
       setToastType('info');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 4000);
@@ -173,7 +175,7 @@ export default function Certification() {
       const sessionsAttended = selectedStudent?.completedSessions ?? 0;
       // Create a simulated PDF download
       const certificateContent = `
-ASTBA - Certificate of Completion
+ASTBA - Certificat de r?ussite
 =====================================
 
 This certifies that
@@ -187,9 +189,9 @@ ${getTrainingName(selectedStudent?.trainingId || 0)}
 Completion Details:
 - Levels Completed: ${totalLevels}
 - Sessions Attended: ${sessionsAttended}
-- Attendance Rate: ${selectedStudent?.attendanceRate}%
+- Taux de pr?sence: ${selectedStudent?.attendanceRate}%
 
-Certificate ID: ${certificateId}
+ID du certificat: ${certificateId}
 Issue Date: ${new Date().toLocaleDateString()}
 
 =====================================
@@ -207,7 +209,7 @@ ASTBA Training Academy
       URL.revokeObjectURL(url);
       
       setIsDownloading(false);
-      setToastMessage('Certificate downloaded successfully!');
+      setToastMessage('Certificat t?l?charg? avec succ?s !');
       setToastType('success');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 4000);
@@ -232,11 +234,15 @@ ASTBA Training Academy
     window.print();
   };
   
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setShowGenerateModal(false);
     setSelectedStudent(null);
     setGenerationSuccess(false);
-  };
+    const activeElement = lastActiveElementRef.current;
+    if (activeElement) {
+      activeElement.focus();
+    }
+  }, []);
 
   const previewName = selectedStudent
     ? `${selectedStudent.firstName} ${selectedStudent.lastName}`
@@ -251,19 +257,47 @@ ASTBA Training Academy
   
   // Focus trap and keyboard handling
   useEffect(() => {
-    if (showGenerateModal && closeButtonRef.current) {
-      closeButtonRef.current.focus();
-    }
-    
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showGenerateModal) {
+    if (!showGenerateModal) return;
+    const dialog = modalRef.current;
+    if (!dialog) return;
+
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
         closeModal();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
       }
     };
+
+    dialog.addEventListener('keydown', handleKeyDown);
+    if (closeButtonRef.current) {
+      closeButtonRef.current.focus();
+    } else {
+      first?.focus();
+    }
     
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showGenerateModal]);
+    return () => dialog.removeEventListener('keydown', handleKeyDown);
+  }, [showGenerateModal, closeModal]);
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -271,7 +305,12 @@ ASTBA Training Academy
       
       {/* Toast Notification */}
       {showToast && (
-        <div className="fixed top-4 right-4 z-50 animate-fade-in">
+        <div
+          className="fixed top-4 right-4 z-50 animate-fade-in"
+          role={toastType === 'success' ? 'status' : 'alert'}
+          aria-live={toastType === 'success' ? 'polite' : 'assertive'}
+          aria-atomic="true"
+        >
           <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg ${
             toastType === 'success' 
               ? 'bg-green-600 text-white' 
@@ -282,7 +321,7 @@ ASTBA Training Academy
             <button 
               onClick={() => setShowToast(false)}
               className="ml-2 w-6 h-6 flex items-center justify-center hover:bg-white/20 rounded transition-colors cursor-pointer"
-              aria-label="Close notification"
+              aria-label="Fermer la notification"
             >
               <i className="ri-close-line" aria-hidden="true"></i>
             </button>
@@ -290,10 +329,10 @@ ASTBA Training Academy
         </div>
       )}
       
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Certification Management</h1>
-          <p className="text-base text-gray-600">Generate and manage training certificates</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2" tabIndex={-1}>Certification Management</h1>
+          <p className="text-base text-gray-600">G?n?rez et g?rez les certificats de formation</p>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
@@ -303,7 +342,7 @@ ASTBA Training Academy
                 <i className="ri-award-line text-3xl text-white" aria-hidden="true"></i>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Eligible Students</p>
+                <p className="text-sm font-medium text-gray-600">Eleves ?ligibles</p>
                 <p className="text-3xl font-bold text-gray-900">{eligibleStudents.length}</p>
               </div>
             </div>
@@ -315,7 +354,7 @@ ASTBA Training Academy
                 <i className="ri-alert-line text-3xl text-white" aria-hidden="true"></i>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Blocked Students</p>
+                <p className="text-sm font-medium text-gray-600">Eleves bloqu?s</p>
                 <p className="text-3xl font-bold text-gray-900">{blockedStudents.length}</p>
               </div>
             </div>
@@ -327,7 +366,7 @@ ASTBA Training Academy
                 <i className="ri-file-text-line text-3xl text-white" aria-hidden="true"></i>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Certificates Issued</p>
+                <p className="text-sm font-medium text-gray-600">Certificats ?mis</p>
                 <p className="text-3xl font-bold text-gray-900">{certificates.length}</p>
               </div>
             </div>
@@ -337,7 +376,7 @@ ASTBA Training Academy
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Eligible for Certification</h2>
+              <h2 className="text-xl font-semibold text-gray-900">?ligible ? la certification</h2>
               <Badge variant="success">{eligibleStudents.length}</Badge>
             </div>
             
@@ -358,7 +397,7 @@ ASTBA Training Academy
                         <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
                           <span className="flex items-center gap-1">
                             <i className="ri-checkbox-circle-line text-green-600" aria-hidden="true"></i>
-                            All sessions completed
+                            All s?ances completed
                           </span>
                           <span className="flex items-center gap-1">
                             <i className="ri-bar-chart-line text-green-600" aria-hidden="true"></i>
@@ -373,10 +412,10 @@ ASTBA Training Academy
                         variant="success" 
                         size="sm" 
                         fullWidth
-                        onClick={() => handleGenerateCertificate(student)}
+                        onClick={(event) => handleGenerateCertificate(student, event)}
                       >
                         <i className="ri-file-download-line" aria-hidden="true"></i>
-                        Generate Certificate
+                        G?n?rer le certificat
                       </Button>
                       <Button variant="outline" size="sm">
                         <i className="ri-eye-line" aria-hidden="true"></i>
@@ -396,7 +435,7 @@ ASTBA Training Academy
           
           <Card>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Blocked from Certification</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Bloqu? pour la certification</h2>
               <Badge variant="warning">{blockedStudents.length}</Badge>
             </div>
             
@@ -430,7 +469,7 @@ ASTBA Training Academy
                         <p className="font-semibold text-gray-900">{student.completedSessions}/{student.totalSessions}</p>
                       </div>
                       <div className="p-2 bg-white rounded border border-amber-200">
-                        <p className="text-xs text-gray-600 mb-1">Attendance</p>
+                        <p className="text-xs text-gray-600 mb-1">Presence</p>
                         <p className="font-semibold text-gray-900">{student.attendanceRate}%</p>
                       </div>
                     </div>
@@ -447,7 +486,7 @@ ASTBA Training Academy
         </div>
         
         <Card className="mt-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Certificate Preview</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Aper?u du certificat</h2>
           <div className="bg-white border-4 border-teal-600 rounded-lg p-12 text-center max-w-3xl mx-auto">
             <div className="mb-6">
               <img 
@@ -455,7 +494,7 @@ ASTBA Training Academy
                 alt="ASTBA Logo" 
                 className="h-16 w-auto mx-auto mb-4"
               />
-              <h3 className="text-3xl font-bold text-gray-900 mb-2">Certificate of Completion</h3>
+              <h3 className="text-3xl font-bold text-gray-900 mb-2">Certificat de r?ussite</h3>
               <p className="text-base text-gray-600">This certifies that</p>
             </div>
             
@@ -463,7 +502,7 @@ ASTBA Training Academy
               <p className="text-4xl font-bold text-teal-600 mb-4">{previewName}</p>
               <p className="text-lg text-gray-700 mb-2">has successfully completed</p>
               <p className="text-2xl font-semibold text-gray-900 mb-6">{previewTrainingName}</p>
-              <p className="text-base text-gray-600">Completed all {previewLevels} levels with {previewSessions} sessions</p>
+              <p className="text-base text-gray-600">Completed all {previewLevels} levels with {previewSessions} s?ances</p>
             </div>
             
             <div className="flex justify-between items-end pt-8 border-t-2 border-gray-300">
@@ -478,7 +517,7 @@ ASTBA Training Academy
                 <div className="border-t-2 border-gray-900 pt-2 mb-1">
                   <p className="text-sm font-semibold text-gray-900">Director Signature</p>
                 </div>
-                <p className="text-xs text-gray-600">Certificate ID: {certificateId || 'ASTBA-XXXX-0000'}</p>
+                <p className="text-xs text-gray-600">ID du certificat: {certificateId || 'ASTBA-XXXX-0000'}</p>
               </div>
             </div>
           </div>
@@ -486,7 +525,7 @@ ASTBA Training Academy
           <div className="flex justify-center gap-3 mt-6">
             <Button variant="primary" onClick={handlePreviewPrint}>
               <i className="ri-printer-line" aria-hidden="true"></i>
-              Print Certificate
+              Imprimer le certificat
             </Button>
             <Button variant="outline" onClick={handlePreviewDownloadPDF}>
               <i className="ri-download-line" aria-hidden="true"></i>
@@ -496,7 +535,7 @@ ASTBA Training Academy
         </Card>
       </main>
       
-      {/* Generate Certificate Modal */}
+      {/* G?n?rer le certificat Modal */}
       {showGenerateModal && selectedStudent && (
         <div 
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
@@ -512,7 +551,7 @@ ASTBA Training Academy
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div>
                 <h2 id="generate-certificate-title" className="text-xl font-semibold text-gray-900">
-                  {generationSuccess ? 'Certificate Generated!' : 'Generate Certificate'}
+                  {generationSuccess ? 'Certificat g?n?r? !' : 'G?n?rer le certificat'}
                 </h2>
                 <p className="text-sm text-gray-600 mt-1">
                   {generationSuccess 
@@ -525,7 +564,7 @@ ASTBA Training Academy
                 ref={closeButtonRef}
                 onClick={closeModal}
                 className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500"
-                aria-label="Close modal"
+                aria-label="Fermer la fen?tre"
               >
                 <i className="ri-close-line text-xl text-gray-500" aria-hidden="true"></i>
               </button>
@@ -540,13 +579,13 @@ ASTBA Training Academy
                     <i className="ri-check-line text-xl text-white" aria-hidden="true"></i>
                   </div>
                   <div>
-                    <p className="font-semibold text-green-800">Certificate Successfully Generated</p>
-                    <p className="text-sm text-green-700">Certificate ID: {certificateId}</p>
+                    <p className="font-semibold text-green-800">Certificat g?n?r? avec succ?s</p>
+                    <p className="text-sm text-green-700">ID du certificat: {certificateId}</p>
                   </div>
                 </div>
               )}
               
-              {/* Certificate Preview */}
+              {/* Aper?u du certificat */}
               <div className="bg-white border-4 border-teal-600 rounded-lg p-8 md:p-12 text-center print:border-2">
                 <div className="mb-6">
                   <img 
@@ -554,7 +593,7 @@ ASTBA Training Academy
                     alt="ASTBA Logo" 
                     className="h-14 w-auto mx-auto mb-4"
                   />
-                  <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Certificate of Completion</h3>
+                  <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Certificat de r?ussite</h3>
                   <p className="text-base text-gray-600">This certifies that</p>
                 </div>
                 
@@ -577,7 +616,7 @@ ASTBA Training Academy
                     </span>
                     <span className="flex items-center gap-1">
                       <i className="ri-bar-chart-line text-teal-600" aria-hidden="true"></i>
-                      {selectedStudent.attendanceRate}% Attendance
+                      {selectedStudent.attendanceRate}% Presence
                     </span>
                   </div>
                 </div>
@@ -601,12 +640,12 @@ ASTBA Training Academy
                     <div className="border-t-2 border-gray-900 pt-2 mb-1 min-w-[150px]">
                       <p className="text-sm font-semibold text-gray-900">Director Signature</p>
                     </div>
-                    <p className="text-xs text-gray-600">Certificate ID: {certificateId}</p>
+                    <p className="text-xs text-gray-600">ID du certificat: {certificateId}</p>
                   </div>
                 </div>
               </div>
               
-              {/* Student Details Summary */}
+              {/* Resume des d?tails ?tudiant */}
               {!generationSuccess && (
                 <div className="mt-6 p-4 bg-gray-50 rounded-lg">
                   <h4 className="font-semibold text-gray-900 mb-3">Student Details</h4>
@@ -616,7 +655,7 @@ ASTBA Training Academy
                       <p className="font-medium text-gray-900">{selectedStudent.email}</p>
                     </div>
                     <div>
-                      <p className="text-gray-600">Enrollment Date</p>
+                      <p className="text-gray-600">Date d'inscription</p>
                       <p className="font-medium text-gray-900">
                         {new Date(selectedStudent.enrollmentDate).toLocaleDateString()}
                       </p>
@@ -628,7 +667,7 @@ ASTBA Training Academy
                       </p>
                     </div>
                     <div>
-                      <p className="text-gray-600">Attendance Rate</p>
+                      <p className="text-gray-600">Taux de pr?sence</p>
                       <p className="font-medium text-gray-900">{selectedStudent.attendanceRate}%</p>
                     </div>
                   </div>
@@ -640,7 +679,7 @@ ASTBA Training Academy
                 <div className="mt-4 p-4 bg-teal-50 border border-teal-200 rounded-lg flex items-start gap-3">
                   <i className="ri-information-line text-teal-600 text-lg mt-0.5" aria-hidden="true"></i>
                   <div className="text-sm text-teal-800">
-                    <p className="font-medium mb-1">Certificate Generation</p>
+                    <p className="font-medium mb-1">G?n?ration du certificat</p>
                     <p>Once generated, this certificate will be recorded in the system and can be downloaded or printed at any time. The certificate ID will be unique and verifiable.</p>
                   </div>
                 </div>
@@ -653,7 +692,7 @@ ASTBA Training Academy
                 <>
                   <Button variant="outline" onClick={handlePrint}>
                     <i className="ri-printer-line" aria-hidden="true"></i>
-                    Print Certificate
+                    Imprimer le certificat
                   </Button>
                   <Button 
                     variant="primary" 
@@ -680,7 +719,7 @@ ASTBA Training Academy
               ) : (
                 <>
                   <Button variant="outline" onClick={closeModal}>
-                    Cancel
+                    Annuler
                   </Button>
                   <Button 
                     variant="success" 
@@ -695,7 +734,7 @@ ASTBA Training Academy
                     ) : (
                       <>
                         <i className="ri-file-download-line" aria-hidden="true"></i>
-                        Generate Certificate
+                        G?n?rer le certificat
                       </>
                     )}
                   </Button>

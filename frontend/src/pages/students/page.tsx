@@ -33,20 +33,21 @@ export default function Students() {
     try {
       const data = await studentService.getProgressAll();
       const normalized = data.map((student) => ({
-        id: student.studentId ?? student.id,
+        id: student.studentId || student.id,
         firstName: student.firstName,
         lastName: student.lastName,
         email: student.email,
         phone: student.phone,
         enrollmentDate: student.enrollmentDate,
-        status: student.status ?? 'active',
-        currentLevel: student.currentLevel ?? 1,
-        trainingId: student.trainingId ?? null,
-        trainingName: student.trainingName ?? '',
-        totalSessions: student.totalSessions ?? 0,
-        completedSessions: student.completedSessions ?? 0,
-        attendanceRate: student.attendanceRate ?? 0,
-        eligibleForCertification: student.eligibleForCertification ?? false
+        status: (student.status || 'APPROVED').toUpperCase(),
+        currentLevel: student.currentLevel || 1,
+        studentCode: student.studentCode || '',
+        trainingId: student.trainingId || null,
+        trainingName: student.trainingName || '',
+        totalSessions: student.totalSessions || 0,
+        completedSessions: student.completedSessions || 0,
+        attendanceRate: student.attendanceRate || 0,
+        eligibleForCertification: student.eligibleForCertification || false
       }));
       setStudents(normalized);
     } catch (error) {
@@ -63,10 +64,10 @@ export default function Students() {
     }
   };
 
-  const getAttendanceStats = (student: any) => {
-    const completedSessions = student.completedSessions ?? 0;
-    const totalSessions = student.totalSessions ?? 0;
-    const rate = student.attendanceRate ?? 0;
+  const getPresenceStats = (student: any) => {
+    const completedSessions = student.completedSessions || 0;
+    const totalSessions = student.totalSessions || 0;
+    const rate = student.attendanceRate || 0;
     return { total: completedSessions, rate, completedSessions, totalSessions };
   };
 
@@ -77,11 +78,12 @@ export default function Students() {
   const filteredStudents = students.filter(student => {
     const matchesSearch = `${student.firstName} ${student.lastName} ${student.email}`.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === 'all' || student.status === filterStatus;
+
     return matchesSearch && matchesFilter;
   });
 
   const getTrainingName = (trainingId: number) => {
-    return trainings.find(t => t.id === trainingId)?.name || 'Unknown';
+    return trainings.find(t => t.id === trainingId)?.name || 'Inconnu';
   };
 
   // Focus management for modal
@@ -174,13 +176,13 @@ export default function Students() {
     }
 
     if (!formData.email.trim()) {
-      errors.email = 'Email is required';
+      errors.email = "L'email est requis";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       errors.email = 'Please enter a valid email address';
     }
 
     if (!formData.phone.trim()) {
-      errors.phone = 'Phone number is required';
+      errors.phone = 'Le t?l?phone est requis';
     }
 
     if (!formData.trainingId) {
@@ -209,7 +211,7 @@ export default function Students() {
       await studentService.create(payload);
       loadStudents();
       setSubmitSuccess(true);
-      // Close modal after success message
+      // Fermer la fen?tre after success message
       setTimeout(() => {
         handleCloseModal();
       }, 2000);
@@ -234,36 +236,29 @@ export default function Students() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Student Management</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2" tabIndex={-1}>Student Management</h1>
             <p className="text-base text-gray-600">Manage student records and track progress</p>
           </div>
-          <Button
-            variant="primary"
-            icon={<i className="ri-add-line text-xl" aria-hidden="true"></i>}
-            onClick={handleOpenModal}
-            aria-haspopup="dialog"
-          >
-            Add Student
-          </Button>
+          
         </div>
 
         <Card className="mb-6">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
-              <label htmlFor="search-students" className="sr-only">Search students</label>
+              <label htmlFor="search-students" className="sr-only">Rechercher des Eleves</label>
               <div className="relative">
                 <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg" aria-hidden="true"></i>
                 <input
                   id="search-students"
                   type="text"
-                  placeholder="Search by name or email..."
+                  placeholder="Rechercher par nom ou email..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                  aria-label="Search students by name or email"
+                  aria-label="Rechercher des Eleves par nom ou email"
                 />
               </div>
             </div>
@@ -273,14 +268,14 @@ export default function Students() {
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer whitespace-nowrap ${filterStatus === 'all' ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
-                All
+                Tous
               </button>
               <button
-                onClick={() => setFilterStatus('active')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer whitespace-nowrap ${filterStatus === 'active' ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                onClick={() => setFilterStatus('APPROVED')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer whitespace-nowrap ${filterStatus === 'APPROVED' ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
-                Active
+                Approuves
               </button>
             </div>
           </div>
@@ -289,14 +284,14 @@ export default function Students() {
         <div className="hidden lg:block">
           <Card padding="none">
             <div className="overflow-x-auto">
-              <table className="w-full" role="table" aria-label="Students list">
+              <table className="w-full" role="table" aria-label="Liste des Eleves">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50">
                     <th scope="col" className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Student</th>
                     <th scope="col" className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Contact</th>
                     <th scope="col" className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Training</th>
                     <th scope="col" className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Progress</th>
-                    <th scope="col" className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Attendance</th>
+                    <th scope="col" className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Presence</th>
                     <th scope="col" className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
                     <th scope="col" className="px-6 py-4 text-right text-sm font-semibold text-gray-900">Actions</th>
                   </tr>
@@ -311,7 +306,7 @@ export default function Students() {
                           </div>
                           <div>
                             <p className="font-medium text-gray-900">{student.firstName} {student.lastName}</p>
-                            <p className="text-sm text-gray-500">ID: {student.id}</p>
+                            <p className="text-sm text-gray-500">ID: {student.studentCode || student.id}</p>
                           </div>
                         </div>
                       </td>
@@ -325,7 +320,7 @@ export default function Students() {
                       </td>
                       <td className="px-6 py-4">
                         {(() => {
-                          const stats = getAttendanceStats(student);
+                          const stats = getPresenceStats(student);
                           const progress = stats.totalSessions > 0
                             ? Math.round((stats.completedSessions / stats.totalSessions) * 100)
                             : 0;
@@ -349,7 +344,7 @@ export default function Students() {
                       </td>
                       <td className="px-6 py-4">
                         {(() => {
-                          const stats = getAttendanceStats(student);
+                          const stats = getPresenceStats(student);
                           return (
                             <Badge variant={stats.rate >= 90 ? 'success' : stats.rate >= 75 ? 'warning' : 'danger'}>
                               {stats.rate}%
@@ -359,12 +354,12 @@ export default function Students() {
                       </td>
                       <td className="px-6 py-4">
                         {(() => {
-                          const stats = getAttendanceStats(student);
+                          const stats = getPresenceStats(student);
                           const isEligible = stats.completedSessions >= stats.totalSessions && stats.rate >= 80;
                           return isEligible ? (
                             <Badge variant="success">
                               <i className="ri-award-line mr-1" aria-hidden="true"></i>
-                              Eligible
+                              ?ligible
                             </Badge>
                           ) : (
                             <Badge variant="info">In Progress</Badge>
@@ -401,7 +396,7 @@ export default function Students() {
                   <p className="text-sm text-gray-500">{student.phone}</p>
                 </div>
                 {(() => {
-                  const stats = getAttendanceStats(student);
+                  const stats = getPresenceStats(student);
                   const isEligible = stats.completedSessions >= stats.totalSessions && stats.rate >= 80;
                   return isEligible ? (
                     <Badge variant="success" size="sm">
@@ -419,7 +414,7 @@ export default function Students() {
 
                 <div>
                   {(() => {
-                    const stats = getAttendanceStats(student);
+                    const stats = getPresenceStats(student);
                     const progress = stats.totalSessions > 0
                       ? Math.round((stats.completedSessions / stats.totalSessions) * 100)
                       : 0;
@@ -446,9 +441,9 @@ export default function Students() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-gray-500">Attendance Rate</p>
+                  <p className="text-xs text-gray-500">Taux de pr?sence</p>
                   {(() => {
-                    const stats = getAttendanceStats(student);
+                    const stats = getPresenceStats(student);
                     return (
                       <Badge variant={stats.rate >= 90 ? 'success' : stats.rate >= 75 ? 'warning' : 'danger'} size="sm">
                         {stats.rate}%
@@ -479,7 +474,7 @@ export default function Students() {
         )}
       </main>
 
-      {/* Add Student Modal */}
+      {/* Ajouter un Eleve */}
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 overflow-y-auto"
@@ -509,7 +504,7 @@ export default function Students() {
                   ref={closeButtonRef}
                   onClick={handleCloseModal}
                   className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors cursor-pointer"
-                  aria-label="Close dialog"
+                  aria-label="Fermer la fen?tre"
                 >
                   <i className="ri-close-line text-2xl" aria-hidden="true"></i>
                 </button>
@@ -680,7 +675,7 @@ export default function Students() {
                             <option value="">Select a training program</option>
                             {trainings.filter(t => t.status === 'active' || t.status === 'upcoming').map(training => (
                               <option key={training.id} value={training.id}>
-                                {training.name} ({training.status === 'upcoming' ? 'Upcoming' : 'Active'})
+                                {training.name} ({training.status === 'upcoming' ? '? venir' : 'Actif'})
                               </option>
                             ))}
                           </select>
@@ -698,7 +693,7 @@ export default function Students() {
                       <div className="flex items-start gap-3 p-4 bg-teal-50 rounded-lg">
                         <i className="ri-information-line text-teal-600 text-xl flex-shrink-0 mt-0.5" aria-hidden="true"></i>
                         <p className="text-sm text-teal-800">
-                          The student will be enrolled at Level 1, Session 1 of the selected training program. You can adjust their progress later from their profile.
+                          The student will be enrolled at Level 1, Session 1 of the selected training program. You can adjust their progress en retardr from their profile.
                         </p>
                       </div>
                     </>
@@ -713,7 +708,7 @@ export default function Students() {
                       variant="outline"
                       onClick={handleCloseModal}
                     >
-                      Cancel
+                      Annuler
                     </Button>
                     <Button
                       type="submit"
@@ -725,7 +720,7 @@ export default function Students() {
                         <i className="ri-user-add-line text-xl" aria-hidden="true"></i>
                       )}
                     >
-                      {isSubmitting ? 'Adding Student...' : 'Add Student'}
+                      {isSubmitting ? 'Ajout de l?Eleve...' : 'Ajouter un Eleve'}
                     </Button>
                   </div>
                 )}

@@ -1,0 +1,17 @@
+ALTER TABLE users ADD COLUMN status VARCHAR(20);
+ALTER TABLE users ADD COLUMN gender VARCHAR(20);
+ALTER TABLE users ADD COLUMN birth_date DATE;
+ALTER TABLE users ADD COLUMN phone VARCHAR(50);
+ALTER TABLE users ADD COLUMN address VARCHAR(255);
+ALTER TABLE users ADD COLUMN career_description VARCHAR(2000);
+
+UPDATE users SET status = 'APPROVED' WHERE status IS NULL;
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    `key` VARCHAR(100) PRIMARY KEY,
+    `value` VARCHAR(255) NOT NULL
+);
+
+INSERT INTO app_settings (`key`, `value`)
+    SELECT 'MAX_STUDENTS', '25'
+    WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE `key` = 'MAX_STUDENTS');

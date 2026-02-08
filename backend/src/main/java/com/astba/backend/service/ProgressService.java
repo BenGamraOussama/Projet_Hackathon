@@ -32,6 +32,7 @@ public class ProgressService {
         response.setEnrollmentDate(student.getEnrollmentDate());
         response.setStatus(student.getStatus());
         response.setCurrentLevel(student.getCurrentLevel());
+        response.setStudentCode(student.getStudentCode());
 
         Training training = student.getTraining();
         Long trainingId = training != null ? training.getId() : null;

@@ -1,4 +1,3 @@
-
 import Card from '../../../components/base/Card';
 
 interface NotificationSettings {
@@ -17,9 +16,9 @@ interface NotificationsPanelProps {
 const notificationItems: { key: keyof NotificationSettings; label: string; desc: string; icon: string; color: string }[] = [
   { key: 'email', label: 'Notifications par email', desc: 'Recevoir les alertes par email', icon: 'ri-mail-send-line', color: 'bg-teal-100 text-teal-600' },
   { key: 'sms', label: 'Notifications SMS', desc: 'Recevoir les alertes par SMS', icon: 'ri-message-2-line', color: 'bg-emerald-100 text-emerald-600' },
-  { key: 'attendance', label: 'Alertes de pr\u00e9sence', desc: 'Notifi\u00e9 des absences et retards', icon: 'ri-checkbox-circle-line', color: 'bg-amber-100 text-amber-600' },
-  { key: 'certification', label: 'Certifications', desc: '\u00c9ligibilit\u00e9 et rappels de certification', icon: 'ri-award-line', color: 'bg-rose-100 text-rose-600' },
-  { key: 'weekly', label: 'R\u00e9sum\u00e9 hebdomadaire', desc: 'Rapport d\u0027activit\u00e9 chaque lundi', icon: 'ri-bar-chart-box-line', color: 'bg-sky-100 text-sky-600' }
+  { key: 'attendance', label: 'Alertes de présence', desc: 'Notifié des absences et retards', icon: 'ri-checkbox-circle-line', color: 'bg-amber-100 text-amber-600' },
+  { key: 'certification', label: 'Certifications', desc: 'Éligibilité et rappels de certification', icon: 'ri-award-line', color: 'bg-rose-100 text-rose-600' },
+  { key: 'weekly', label: 'Résumé hebdomadaire', desc: 'Rapport d’activité chaque lundi', icon: 'ri-bar-chart-box-line', color: 'bg-sky-100 text-sky-600' }
 ];
 
 export default function NotificationsPanel({ notifications, onToggle }: NotificationsPanelProps) {
@@ -31,7 +30,7 @@ export default function NotificationsPanel({ notifications, onToggle }: Notifica
         </div>
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Notifications</h2>
-          <p className="text-xs text-gray-500">G\u00e9rez vos pr\u00e9f\u00e9rences de notification</p>
+          <p className="text-xs text-gray-500">Gérez vos préférences de notification</p>
         </div>
       </div>
 

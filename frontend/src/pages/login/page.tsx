@@ -23,8 +23,10 @@ export default function Login() {
     // Connexion via API
     try {
       if (formData.email && formData.password) {
-        await authService.login(formData.email, formData.password);
-        navigate('/dashboard');
+        const result = await authService.login(formData.email, formData.password);
+        const role = result?.user?.role || authService.getUserRole();
+        const redirect = authService.getDefaultRoute(role);
+        navigate(redirect);
       } else {
         setError('Veuillez remplir tous les champs');
       }
@@ -39,7 +41,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-amber-50 flex">
       {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+      <aside className="hidden lg:flex lg:w-1/2 relative overflow-hidden" aria-hidden="true">
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{
@@ -57,7 +59,7 @@ export default function Login() {
                 className="h-16 w-auto bg-white rounded-xl p-2"
               />
               <div>
-                <h1 className="text-2xl font-bold">ASTBA</h1>
+                <p className="text-2xl font-bold">ASTBA</p>
                 <p className="text-teal-200 text-sm">Sciences & Technology Ben Arous</p>
               </div>
             </div>
@@ -109,10 +111,10 @@ export default function Login() {
             © 2024 Association Sciences and Technology Ben Arous
           </p>
         </div>
-      </div>
+      </aside>
 
       {/* Right Side - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
+      <main id="main-content" tabIndex={-1} className="w-full lg:w-1/2 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
@@ -122,19 +124,24 @@ export default function Login() {
               className="h-14 w-auto"
             />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">ASTBA</h1>
-              <p className="text-xs text-gray-500">Training & Attendance</p>
+              <p className="text-xl font-bold text-gray-900">ASTBA</p>
+              <p className="text-xs text-gray-500">Training & Presence</p>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Bienvenue</h2>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2" tabIndex={-1}>Bienvenue</h1>
               <p className="text-gray-600">Connectez-vous à votre compte</p>
             </div>
 
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+              <div
+                id="login-error"
+                role="alert"
+                aria-live="assertive"
+                className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
+              >
                 <i className="ri-error-warning-line text-xl text-red-600" aria-hidden="true"></i>
                 <p className="text-sm text-red-700">{error}</p>
               </div>
@@ -155,6 +162,8 @@ export default function Login() {
                     name="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    aria-describedby={error ? 'login-error' : undefined}
+                    aria-invalid={Boolean(error)}
                     className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200"
                     placeholder="votre@email.com"
                     required
@@ -176,6 +185,8 @@ export default function Login() {
                     name="password"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    aria-describedby={error ? 'login-error' : undefined}
+                    aria-invalid={Boolean(error)}
                     className="w-full pl-11 pr-12 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200"
                     placeholder="••••••••"
                     required
@@ -203,6 +214,7 @@ export default function Login() {
                 </label>
                 <button
                   type="button"
+                  onClick={() => navigate('/forgot-password')}
                   className="text-sm text-teal-600 hover:text-teal-700 font-medium cursor-pointer"
                 >
                   Mot de passe oublié ?
@@ -252,7 +264,7 @@ export default function Login() {
             Besoin d'aide ? <a href="mailto:contact@astba.tn" className="text-teal-600 hover:text-teal-700 font-medium cursor-pointer">Contactez-nous</a>
           </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

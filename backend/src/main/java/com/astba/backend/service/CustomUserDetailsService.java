@@ -22,6 +22,12 @@ public class CustomUserDetailsService implements UserDetailsService {
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+        if (user.getStatus() != null && !"APPROVED".equalsIgnoreCase(user.getStatus())) {
+            throw new UsernameNotFoundException("User not active");
+        }
+        if ("ELEVE".equalsIgnoreCase(user.getRole())) {
+            throw new UsernameNotFoundException("Student web access disabled");
+        }
 
         List<SimpleGrantedAuthority> authorities = List.of(
                 new SimpleGrantedAuthority("ROLE_" + user.getRole()));

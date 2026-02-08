@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Navbar from '../../components/feature/Navbar';
 import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
@@ -25,6 +25,9 @@ export default function Users() {
   const [successMessage, setSuccessMessage] = useState('');
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [emailSent, setEmailSent] = useState<boolean | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -46,7 +49,8 @@ export default function Users() {
     return scoped.filter((user) => user.role === filterRole);
   }, [users, filterRole]);
 
-  const openCreateModal = () => {
+  const openCreateModal = (event?: React.MouseEvent<HTMLButtonElement>) => {
+    lastActiveElementRef.current = (event?.currentTarget ? document.activeElement : null) as HTMLElement | null;
     setFormData({ firstName: '', lastName: '', email: '', role: 'FORMATEUR' });
     setFormError('');
     setSuccessMessage('');
@@ -55,7 +59,8 @@ export default function Users() {
     setIsModalOpen(true);
   };
 
-  const openEditModal = (user) => {
+  const openEditModal = (user, event?: React.MouseEvent<HTMLButtonElement>) => {
+    lastActiveElementRef.current = (event?.currentTarget ? document.activeElement : null) as HTMLElement | null;
     setSelectedUser(user);
     setFormData({
       firstName: user.firstName || '',
@@ -78,6 +83,10 @@ export default function Users() {
     setResetPassword(false);
     setTemporaryPassword('');
     setEmailSent(null);
+    const activeElement = lastActiveElementRef.current;
+    if (activeElement) {
+      activeElement.focus();
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -92,12 +101,12 @@ export default function Users() {
         setTemporaryPassword(response.temporaryPassword);
       }
       const statusText = response?.emailSent
-        ? 'Email envoye.'
-        : `Email non envoye (${response?.emailError || 'verifiez SMTP'}).`;
+        ? 'Email envoy?.'
+        : `Email non envoy? (${response?.emailError || 'v?rifiez SMTP'}).`;
       setSuccessMessage(`Compte cree. ${statusText}`);
       await loadUsers();
     } catch (error: any) {
-      setFormError(error?.response?.data || "Impossible de creer l'utilisateur.");
+      setFormError(error?.response?.data || "Impossible de cr?er l'utilisateur.");
     } finally {
       setIsSubmitting(false);
     }
@@ -121,14 +130,14 @@ export default function Users() {
         setTemporaryPassword(response.temporaryPassword);
       }
       const statusText = response?.emailSent
-        ? 'Email envoye.'
+        ? 'Email envoy?.'
         : resetPassword
-          ? `Email non envoye (${response?.emailError || 'verifiez SMTP'}).`
+          ? `Email non envoy? (${response?.emailError || 'v?rifiez SMTP'}).`
           : '';
       setSuccessMessage(`Compte mis a jour. ${statusText}`.trim());
       await loadUsers();
     } catch (error: any) {
-      setFormError(error?.response?.data || "Impossible de mettre a jour l'utilisateur.");
+      setFormError(error?.response?.data || "Impossible de mettre ? jour l'utilisateur.");
     } finally {
       setIsSubmitting(false);
     }
@@ -149,17 +158,58 @@ export default function Users() {
     return role === 'RESPONSABLE' ? 'Responsable formation' : 'Formateur';
   };
 
+  useEffect(() => {
+    if (!isModalOpen && !isEditModalOpen) return;
+    const dialog = modalRef.current;
+    if (!dialog) return;
+
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeModal();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+
+    dialog.addEventListener('keydown', handleKeyDown);
+    if (closeButtonRef.current) {
+      closeButtonRef.current.focus();
+    } else {
+      first?.focus();
+    }
+
+    return () => dialog.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, isEditModalOpen]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestion des utilisateurs</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2" tabIndex={-1}>Gestion des utilisateurs</h1>
             <p className="text-base text-gray-600">Formateurs et responsables formation</p>
           </div>
-          <Button variant="primary" onClick={openCreateModal}>
+          <Button variant="primary" onClick={(event) => openCreateModal(event)}>
             <i className="ri-user-add-line" aria-hidden="true"></i>
             Ajouter un compte
           </Button>
@@ -227,7 +277,7 @@ export default function Users() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="outline" onClick={() => openEditModal(user)}>
+                        <Button size="sm" variant="outline" onClick={(event) => openEditModal(user, event)}>
                           <i className="ri-edit-line" aria-hidden="true"></i>
                           Modifier
                         </Button>
@@ -253,17 +303,19 @@ export default function Users() {
       </main>
 
       {(isModalOpen || isEditModalOpen) && (
-        <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="user-modal-title">
           <div className="fixed inset-0 bg-black/50" onClick={closeModal} aria-hidden="true"></div>
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="relative w-full max-w-lg bg-white rounded-xl shadow-xl">
+            <div ref={modalRef} className="relative w-full max-w-lg bg-white rounded-xl shadow-xl">
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">
+                <h2 id="user-modal-title" className="text-xl font-semibold text-gray-900">
                   {isEditModalOpen ? 'Modifier le compte' : 'Ajouter un compte'}
                 </h2>
                 <button
+                  ref={closeButtonRef}
                   onClick={closeModal}
                   className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                  aria-label="Fermer la fen?tre"
                 >
                   <i className="ri-close-line text-2xl" aria-hidden="true"></i>
                 </button>
@@ -352,13 +404,13 @@ export default function Users() {
                         onChange={(e) => setResetPassword(e.target.checked)}
                         className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
                       />
-                      Regenerer le mot de passe et envoyer par email
+                      Regenerer le mot de passe et envoy?r par email
                     </label>
                   )}
 
                   {!isEditModalOpen && (
                     <div className="text-xs text-gray-500">
-                      Un mot de passe sera genere automatiquement et envoye par email.
+                      Un mot de passe sera genere automatiquement et envoy? par email.
                     </div>
                   )}
                 </div>
@@ -368,7 +420,7 @@ export default function Users() {
                     Annuler
                   </Button>
                   <Button type="submit" variant="primary" disabled={isSubmitting}>
-                    {isSubmitting ? 'Sauvegarde...' : isEditModalOpen ? 'Mettre a jour' : 'Creer'}
+                    {isSubmitting ? 'Sauvegarde...' : isEditModalOpen ? 'Mettre ? jour' : 'Cr?er'}
                   </Button>
                 </div>
               </form>

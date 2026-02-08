@@ -7,6 +7,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 import java.util.Date;
 import java.security.Key;
+import com.astba.backend.entity.User;
 
 @Component
 public class JwtTokenProvider {
@@ -28,6 +29,21 @@ public class JwtTokenProvider {
 
         return Jwts.builder()
                 .setSubject(username)
+                .claim("role", authentication.getAuthorities().stream().findFirst().map(Object::toString).orElse(""))
+                .setIssuedAt(new Date())
+                .setExpiration(expiryDate)
+                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
+                .compact();
+    }
+
+    public String generateTokenForUser(User user) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + jwtExpirationInMs);
+        String role = user.getRole() != null ? "ROLE_" + user.getRole() : "";
+
+        return Jwts.builder()
+                .setSubject(user.getEmail())
+                .claim("role", role)
                 .setIssuedAt(new Date())
                 .setExpiration(expiryDate)
                 .signWith(getSigningKey(), SignatureAlgorithm.HS512)

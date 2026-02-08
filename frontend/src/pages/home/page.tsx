@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import VoiceToText from './components/VoiceToText';
+import api from '../../services/api';
 
 // Stats data
 const platformStats = [
-  { value: '150+', label: '??l??ves accompagn??s', icon: 'ri-user-line' },
+  { value: '150+', label: 'Eleves accompagn?s', icon: 'ri-user-line' },
   { value: '4', label: 'Formations actives', icon: 'ri-book-open-line' },
   { value: '24', label: 'Sessions par formation', icon: 'ri-calendar-line' },
   { value: '98%', label: 'Taux de satisfaction', icon: 'ri-star-line' }
@@ -95,6 +96,41 @@ const userTypes = [
 
 export default function HomePage() {
   const [isScrolled, setIsScrolled] = useState(false);
+  const [showJobModal, setShowJobModal] = useState(false);
+  const [showStudentModal, setShowStudentModal] = useState(false);
+  const [jobSubmitting, setJobSubmitting] = useState(false);
+  const [studentSubmitting, setStudentSubmitting] = useState(false);
+  const [jobMessage, setJobMessage] = useState('');
+  const [studentMessage, setStudentMessage] = useState('');
+  const [jobError, setJobError] = useState('');
+  const [studentError, setStudentError] = useState('');
+  const jobModalRef = useRef<HTMLDivElement>(null);
+  const studentModalRef = useRef<HTMLDivElement>(null);
+  const jobCloseRef = useRef<HTMLButtonElement>(null);
+  const studentCloseRef = useRef<HTMLButtonElement>(null);
+  const lastActiveRef = useRef<HTMLElement | null>(null);
+
+  const [jobForm, setJobForm] = useState({
+    firstName: '',
+    lastName: '',
+    gender: '',
+    birthDate: '',
+    email: '',
+    phone: '',
+    address: '',
+    careerDescription: '',
+    requestedRole: 'FORMATEUR'
+  });
+
+  const [studentForm, setStudentForm] = useState({
+    firstName: '',
+    lastName: '',
+    gender: '',
+    birthDate: '',
+    email: '',
+    phone: '',
+    address: ''
+  });
 
   useEffect(() => {
     const handleScroll = () => {
@@ -103,6 +139,118 @@ export default function HomePage() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    if (!showJobModal && !showStudentModal) return;
+    const dialog = showJobModal ? jobModalRef.current : studentModalRef.current;
+    const closeButton = showJobModal ? jobCloseRef.current : studentCloseRef.current;
+    if (!dialog) return;
+
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeModal();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+
+    dialog.addEventListener('keydown', handleKeyDown);
+    if (closeButton) {
+      closeButton.focus();
+    } else {
+      first?.focus();
+    }
+
+    return () => dialog.removeEventListener('keydown', handleKeyDown);
+  }, [showJobModal, showStudentModal]);
+
+  const openJobModal = () => {
+    lastActiveRef.current = document.activeElement as HTMLElement | null;
+    setJobMessage('');
+    setJobError('');
+    setShowJobModal(true);
+  };
+
+  const openStudentModal = () => {
+    lastActiveRef.current = document.activeElement as HTMLElement | null;
+    setStudentMessage('');
+    setStudentError('');
+    setShowStudentModal(true);
+  };
+
+  const closeModal = () => {
+    setShowJobModal(false);
+    setShowStudentModal(false);
+    if (lastActiveRef.current) {
+      lastActiveRef.current.focus();
+    }
+  };
+
+  const handleJobSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setJobSubmitting(true);
+    setJobError('');
+    try {
+      const response = await api.post('/public/job-application', jobForm);
+      setJobMessage(response.data?.message || 'Demande envoyée.');
+      setJobForm({
+        firstName: '',
+        lastName: '',
+        gender: '',
+        birthDate: '',
+        email: '',
+        phone: '',
+        address: '',
+        careerDescription: '',
+        requestedRole: 'FORMATEUR'
+      });
+    } catch (error: any) {
+      setJobError(error?.response?.data || 'Erreur lors de l’envoi.');
+    } finally {
+      setJobSubmitting(false);
+    }
+  };
+
+  const handleStudentSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setStudentSubmitting(true);
+    setStudentError('');
+    try {
+      const response = await api.post('/public/student-signup', studentForm);
+      setStudentMessage(response.data?.message || 'Demande envoyée.');
+      setStudentForm({
+        firstName: '',
+        lastName: '',
+        gender: '',
+        birthDate: '',
+        email: '',
+        phone: '',
+        address: ''
+      });
+    } catch (error: any) {
+      setStudentError(error?.response?.data || 'Erreur lors de l’envoi.');
+    } finally {
+      setStudentSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -134,6 +282,7 @@ export default function HomePage() {
         </div>
       </nav>
 
+      <main id="main-content" tabIndex={-1}>
       {/* Hero Section */}
       <section className="relative min-h-[90vh] flex items-center overflow-hidden">
         <div className="absolute inset-0">
@@ -152,7 +301,7 @@ export default function HomePage() {
               <span className="text-white/90 text-sm">Association Sciences and Technology Ben Arous</span>
             </div>
             
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6" tabIndex={-1}>
               Plateforme de suivi des <span className="text-teal-400">formations</span> et <span className="text-teal-400">présences</span>
             </h1>
             
@@ -162,20 +311,22 @@ export default function HomePage() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link 
-                to="/login" 
+              <button
+                type="button"
+                onClick={openJobModal}
                 className="inline-flex items-center justify-center gap-2 bg-teal-600 text-white px-8 py-4 rounded-lg font-medium hover:bg-teal-700 transition-colors cursor-pointer whitespace-nowrap"
               >
-                Accéder à la plateforme
+                Demande de travail
                 <i className="ri-arrow-right-line"></i>
-              </Link>
-              <a 
-                href="#features" 
+              </button>
+              <button
+                type="button"
+                onClick={openStudentModal}
                 className="inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur-sm border border-white/30 text-white px-8 py-4 rounded-lg font-medium hover:bg-white/20 transition-colors cursor-pointer whitespace-nowrap"
               >
                 <i className="ri-play-circle-line"></i>
-                Découvrir les fonctionnalités
-              </a>
+                S'inscrire comme élève
+              </button>
             </div>
           </div>
         </div>
@@ -251,7 +402,7 @@ export default function HomePage() {
             <div className="relative">
               <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl p-8">
                 <img 
-                  src="https://readdy.ai/api/search-image?query=Students%20working%20on%20robotics%20and%20technology%20projects%20in%20modern%20classroom%20with%20computers%20and%20electronic%20components%20collaborative%20learning%20environment%20bright%20lighting%20educational%20workshop%20setting&width=600&height=500&seq=about001&orientation=portrait"
+                  src="https://readdy.ai/api/search-image?query=Eleves%20working%20on%20robotics%20and%20technology%20projects%20in%20modern%20classroom%20with%20computers%20and%20electronic%20components%20collaborative%20learning%20environment%20bright%20lighting%20educational%20workshop%20setting&width=600&height=500&seq=about001&orientation=portrait"
                   alt="Élèves en formation"
                   className="w-full h-80 object-cover object-top rounded-xl shadow-lg"
                 />
@@ -509,6 +660,7 @@ export default function HomePage() {
           </Link>
         </div>
       </section>
+      </main>
 
       {/* Footer */}
       <footer className="bg-gray-50 border-t border-gray-200">
@@ -572,6 +724,302 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {showJobModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={closeModal}>
+          <div
+            ref={jobModalRef}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="job-modal-title"
+            className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-200 p-6"
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 id="job-modal-title" className="text-xl font-bold text-gray-900">
+                  Demande de travail (Formateur / Responsable)
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Merci de remplir toutes les informations demandées.
+                </p>
+              </div>
+              <button
+                ref={jobCloseRef}
+                type="button"
+                onClick={closeModal}
+                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100"
+                aria-label="Fermer"
+              >
+                <i className="ri-close-line text-xl text-gray-500" aria-hidden="true"></i>
+              </button>
+            </div>
+
+            {jobError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700" role="alert">
+                {jobError}
+              </div>
+            )}
+            {jobMessage && (
+              <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-lg text-sm text-teal-700" role="status">
+                {jobMessage}
+              </div>
+            )}
+
+            <form onSubmit={handleJobSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
+                <input
+                  type="text"
+                  required
+                  value={jobForm.lastName}
+                  onChange={(e) => setJobForm({ ...jobForm, lastName: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
+                <input
+                  type="text"
+                  required
+                  value={jobForm.firstName}
+                  onChange={(e) => setJobForm({ ...jobForm, firstName: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Genre</label>
+                <select
+                  required
+                  value={jobForm.gender}
+                  onChange={(e) => setJobForm({ ...jobForm, gender: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="">Sélectionner</option>
+                  <option value="HOMME">Homme</option>
+                  <option value="FEMME">Femme</option>
+                  <option value="AUTRE">Autre</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date de naissance</label>
+                <input
+                  type="date"
+                  required
+                  value={jobForm.birthDate}
+                  onChange={(e) => setJobForm({ ...jobForm, birthDate: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={jobForm.email}
+                  onChange={(e) => setJobForm({ ...jobForm, email: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+                <input
+                  type="tel"
+                  required
+                  value={jobForm.phone}
+                  onChange={(e) => setJobForm({ ...jobForm, phone: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
+                <input
+                  type="text"
+                  required
+                  value={jobForm.address}
+                  onChange={(e) => setJobForm({ ...jobForm, address: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rôle demandé</label>
+                <select
+                  required
+                  value={jobForm.requestedRole}
+                  onChange={(e) => setJobForm({ ...jobForm, requestedRole: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="FORMATEUR">Formateur</option>
+                  <option value="RESPONSABLE">Responsable</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description carrière</label>
+                <textarea
+                  required
+                  rows={4}
+                  value={jobForm.careerDescription}
+                  onChange={(e) => setJobForm({ ...jobForm, careerDescription: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div className="sm:col-span-2 flex flex-col sm:flex-row gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={jobSubmitting}
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg bg-teal-600 text-white font-semibold hover:bg-teal-700 disabled:opacity-60"
+                >
+                  {jobSubmitting ? 'Envoi...' : 'Envoyer la demande'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showStudentModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={closeModal}>
+          <div
+            ref={studentModalRef}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="student-modal-title"
+            className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-200 p-6"
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 id="student-modal-title" className="text-xl font-bold text-gray-900">
+                  Inscription élève
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Votre inscription sera confirmée par email.
+                </p>
+              </div>
+              <button
+                ref={studentCloseRef}
+                type="button"
+                onClick={closeModal}
+                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100"
+                aria-label="Fermer"
+              >
+                <i className="ri-close-line text-xl text-gray-500" aria-hidden="true"></i>
+              </button>
+            </div>
+
+            {studentError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700" role="alert">
+                {studentError}
+              </div>
+            )}
+            {studentMessage && (
+              <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-lg text-sm text-teal-700" role="status">
+                {studentMessage}
+              </div>
+            )}
+
+            <form onSubmit={handleStudentSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
+                <input
+                  type="text"
+                  required
+                  value={studentForm.lastName}
+                  onChange={(e) => setStudentForm({ ...studentForm, lastName: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
+                <input
+                  type="text"
+                  required
+                  value={studentForm.firstName}
+                  onChange={(e) => setStudentForm({ ...studentForm, firstName: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Genre</label>
+                <select
+                  required
+                  value={studentForm.gender}
+                  onChange={(e) => setStudentForm({ ...studentForm, gender: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="">Sélectionner</option>
+                  <option value="HOMME">Homme</option>
+                  <option value="FEMME">Femme</option>
+                  <option value="AUTRE">Autre</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date de naissance</label>
+                <input
+                  type="date"
+                  required
+                  value={studentForm.birthDate}
+                  onChange={(e) => setStudentForm({ ...studentForm, birthDate: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={studentForm.email}
+                  onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+                <input
+                  type="tel"
+                  required
+                  value={studentForm.phone}
+                  onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
+                <input
+                  type="text"
+                  required
+                  value={studentForm.address}
+                  onChange={(e) => setStudentForm({ ...studentForm, address: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div className="sm:col-span-2 flex flex-col sm:flex-row gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={studentSubmitting}
+                  className="w-full sm:flex-1 px-4 py-2 rounded-lg bg-teal-600 text-white font-semibold hover:bg-teal-700 disabled:opacity-60"
+                >
+                  {studentSubmitting ? 'Envoi...' : "S'inscrire"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

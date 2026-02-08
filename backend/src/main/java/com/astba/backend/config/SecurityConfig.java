@@ -42,7 +42,7 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/h2-console/**", "/h2-console").permitAll()
+                        .requestMatchers("/api/auth/**", "/api/public/**", "/h2-console/**", "/h2-console").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll());
 
@@ -84,3 +84,4 @@ public class SecurityConfig {
         return source;
     }
 }
+

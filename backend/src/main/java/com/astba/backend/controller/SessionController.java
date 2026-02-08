@@ -115,6 +115,12 @@ public class SessionController {
             @RequestBody @NonNull SessionScheduleUpdateRequest request) {
         return sessionRepository.findById(sessionId)
                 .map((@NonNull Session session) -> {
+                    if (request.getTitle() != null) {
+                        session.setTitle(request.getTitle());
+                    }
+                    if (request.getObjective() != null) {
+                        session.setObjective(request.getObjective());
+                    }
                     if (request.getStartAt() != null) {
                         session.setStartAt(request.getStartAt());
                     }
@@ -126,6 +132,15 @@ public class SessionController {
                     }
                     if (request.getStatus() != null) {
                         session.setStatus(request.getStatus());
+                    }
+                    if (request.getModality() != null) {
+                        session.setModality(request.getModality());
+                    }
+                    if (request.getMaterials() != null) {
+                        session.setMaterials(request.getMaterials());
+                    }
+                    if (request.getAccessibilityNotes() != null) {
+                        session.setAccessibilityNotes(request.getAccessibilityNotes());
                     }
                     Session saved = sessionRepository.save(session);
                     auditService.log("SESSION_SCHEDULE_UPDATED", "Session", String.valueOf(saved.getId()),

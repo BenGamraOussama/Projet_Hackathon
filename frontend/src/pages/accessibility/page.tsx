@@ -1,23 +1,17 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Navbar from '../../components/feature/Navbar';
 import Card from '../../components/base/Card';
 import Button from '../../components/base/Button';
 import Badge from '../../components/base/Badge';
 import { studentsData } from '../../mocks/students';
 import { preferenceService } from '../../services/preference.service';
-
-interface AccessibilitySettings {
-  fontSize: string;
-  contrast: string;
-  animations: boolean;
-  screenReader: boolean;
-  focusHighlight: boolean;
-  lineSpacing: string;
-  cursorSize: string;
-  colorBlindMode: string;
-  simplifyUi: boolean;
-}
+import { useAnnouncer } from '../../components/a11y/Announcer';
+import {
+  applyAccessibilitySettings,
+  defaultAccessibilitySettings,
+  type AccessibilitySettings
+} from '../../components/a11y/accessibilitySettings';
 
 interface StudentAccommodation {
   studentId: number;
@@ -28,25 +22,27 @@ interface StudentAccommodation {
   notes: string;
 }
 
-const defaultSettings: AccessibilitySettings = {
-  fontSize: 'medium',
-  contrast: 'normal',
-  animations: true,
-  screenReader: true,
-  focusHighlight: true,
-  lineSpacing: 'normal',
-  cursorSize: 'normal',
-  colorBlindMode: 'none',
-  simplifyUi: false
-};
-
 export default function Accessibility() {
-  const [settings, setSettings] = useState<AccessibilitySettings>(defaultSettings);
-  const [savedSettings, setSavedSettings] = useState<AccessibilitySettings>(defaultSettings);
+  const [settings, setSettings] = useState<AccessibilitySettings>(defaultAccessibilitySettings);
+  const [savedSettings, setSavedSettings] = useState<AccessibilitySettings>(defaultAccessibilitySettings);
   const [hasChanges, setHasChanges] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'info'>('success');
+  const [screenReaderTestMessage, setScreenReaderTestMessage] = useState('');
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState({
+    arabic: false,
+    arabicFemale: false,
+    frenchFemale: false
+  });
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voicePrefs, setVoicePrefs] = useState({
+    fr: '',
+    ar: '',
+    en: ''
+  });
+  const { announce } = useAnnouncer();
   
   // Student accommodations
   const [accommodations, setAccommodations] = useState<StudentAccommodation[]>([]);
@@ -59,73 +55,32 @@ export default function Accessibility() {
     cognitiveSupport: false,
     notes: ''
   });
+  const accommodationModalRef = useRef<HTMLDivElement>(null);
+  const accommodationCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const lastActifElementRef = useRef<HTMLElement | null>(null);
   
   // Preview mode
   const [previewMode, setPreviewMode] = useState(false);
 
   const applySettingsToDOM = useCallback((s: AccessibilitySettings) => {
-    const root = document.documentElement;
-    
-    // Font size
-    const fontSizes: Record<string, string> = {
-      small: '14px',
-      medium: '16px',
-      large: '18px',
-      xlarge: '20px'
-    };
-    root.style.fontSize = fontSizes[s.fontSize] || '16px';
-    
-    // Contrast
-    root.classList.toggle('high-contrast', s.contrast === 'high');
-    
-    // Animations
-    if (!s.animations) {
-      root.style.setProperty('--animation-duration', '0s');
-      root.classList.add('reduce-motion');
-    } else {
-      root.style.removeProperty('--animation-duration');
-      root.classList.remove('reduce-motion');
-    }
-    
-    // Focus highlight
-    root.classList.toggle('enhanced-focus', s.focusHighlight);
-    
-    // Line spacing
-    const lineSpacings: Record<string, string> = {
-      compact: '1.4',
-      normal: '1.6',
-      relaxed: '1.8',
-      loose: '2'
-    };
-    root.style.lineHeight = lineSpacings[s.lineSpacing] || '1.6';
-    
-    // Cursor size
-    if (s.cursorSize === 'large') {
-      root.classList.add('large-cursor');
-    } else {
-      root.classList.remove('large-cursor');
-    }
-    
-    // Color blind mode
-    root.classList.remove('protanopia', 'deuteranopia', 'tritanopia');
-    if (s.colorBlindMode !== 'none') {
-      root.classList.add(s.colorBlindMode);
-    }
-
-    // Simplify UI
-    root.classList.toggle('simplify-ui', s.simplifyUi);
+    applyAccessibilitySettings(s);
   }, []);
+
+  const toPreferencePayload = (s: AccessibilitySettings) => {
+    const { speechFeedback, ...payload } = s;
+    return payload;
+  };
 
   // Load settings on mount
   useEffect(() => {
     const loadSettings = async () => {
-      let initialSettings = defaultSettings;
+      let initialSettings = defaultAccessibilitySettings;
       let loadedFromRemote = false;
 
       try {
         const remote = await preferenceService.get();
         if (remote) {
-          initialSettings = { ...defaultSettings, ...remote };
+          initialSettings = { ...defaultAccessibilitySettings, ...remote };
           loadedFromRemote = true;
         }
       } catch (error) {
@@ -135,7 +90,15 @@ export default function Accessibility() {
       if (!loadedFromRemote) {
         const stored = localStorage.getItem('accessibilitySettings');
         if (stored) {
-          initialSettings = { ...defaultSettings, ...JSON.parse(stored) };
+          initialSettings = { ...defaultAccessibilitySettings, ...JSON.parse(stored) };
+        }
+      } else {
+        const stored = localStorage.getItem('accessibilitySettings');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (typeof parsed?.speechFeedback === 'boolean') {
+            initialSettings = { ...initialSettings, speechFeedback: parsed.speechFeedback };
+          }
         }
       }
 
@@ -166,30 +129,30 @@ export default function Accessibility() {
 
   const handleSaveSettings = async () => {
     try {
-      await preferenceService.update(settings);
+      await preferenceService.update(toPreferencePayload(settings));
       localStorage.setItem('accessibilitySettings', JSON.stringify(settings));
       setSavedSettings(settings);
       applySettingsToDOM(settings);
       setPreviewMode(false);
-      showNotification('Param??tres sauvegard??s avec succ??s !');
+      showNotification('Param?tres sauvegard?s avec succ?s !');
     } catch (error) {
       console.error('Failed to save preferences', error);
-      showNotification('Echec de sauvegarde des param??tres', 'info');
+      showNotification('Echec de sauvegarde des param?tres', 'info');
     }
   };
 
   const handleResetSettings = async () => {
     try {
-      await preferenceService.update(defaultSettings);
+      await preferenceService.update(toPreferencePayload(defaultAccessibilitySettings));
     } catch (error) {
       console.error('Failed to reset preferences', error);
     }
-    setSettings(defaultSettings);
-    localStorage.setItem('accessibilitySettings', JSON.stringify(defaultSettings));
-    setSavedSettings(defaultSettings);
-    applySettingsToDOM(defaultSettings);
+    setSettings(defaultAccessibilitySettings);
+    localStorage.setItem('accessibilitySettings', JSON.stringify(defaultAccessibilitySettings));
+    setSavedSettings(defaultAccessibilitySettings);
+    applySettingsToDOM(defaultAccessibilitySettings);
     setPreviewMode(false);
-    showNotification('Param??tres r??initialis??s par d??faut', 'info');
+    showNotification('Param?tres r?initialis?s par d?faut', 'info');
   };
 
   const handlePreviewToggle = () => {
@@ -198,7 +161,7 @@ export default function Accessibility() {
       applySettingsToDOM(savedSettings);
       setPreviewMode(false);
     } else {
-      // Apply current settings for preview
+      // Appliquer current settings for preview
       applySettingsToDOM(settings);
       setPreviewMode(true);
     }
@@ -209,10 +172,94 @@ export default function Accessibility() {
     if (previewMode) {
       applySettingsToDOM({ ...settings, [key]: value });
     }
+    if (key === 'speechFeedback' && typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem('accessibilitySettings');
+        const base = raw ? JSON.parse(raw) : { ...defaultAccessibilitySettings };
+        window.localStorage.setItem('accessibilitySettings', JSON.stringify({ ...base, speechFeedback: value }));
+        window.sessionStorage.setItem('astba_speech_session', value ? 'on' : 'off');
+      } catch (error) {
+        console.error('Failed to persist speech feedback setting', error);
+      }
+    }
   };
+
+  const handleVoicePreferenceChange = (langKey: 'fr' | 'ar' | 'en', voiceUri: string) => {
+    const next = { ...voicePrefs, [langKey]: voiceUri };
+    setVoicePrefs(next);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem('astba_voice_prefs', JSON.stringify(next));
+      } catch (error) {
+        console.error('Failed to save voice preferences', error);
+      }
+    }
+  };
+
+  const voiceOptionsFor = (prefix: 'fr' | 'ar' | 'en') => {
+    return voices.filter((voice) => voice.lang.toLowerCase().startsWith(prefix));
+  };
+
+  const handleScreenReaderTest = () => {
+    const timestamp = new Date().toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+    const message = `Test lecteur d'ecran reussi. Heure ${timestamp}.`;
+    setScreenReaderTestMessage(message);
+    announce(message);
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      setSpeechSupported(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const synth = window.speechSynthesis;
+    const updateVoices = () => {
+      const voices = synth.getVoices();
+      setVoices(voices);
+      const isArabic = (voice: SpeechSynthesisVoice) => voice.lang.toLowerCase().startsWith('ar');
+      const isFrench = (voice: SpeechSynthesisVoice) => voice.lang.toLowerCase().startsWith('fr');
+      const isFemale = (voice: SpeechSynthesisVoice) => /female|woman|femme|zira|susan|samantha|helena|karen|amelie|amélie|julie|audrey|marie|lea|léa|lucie|celine|céline|hortense|denise|claire|brigitte|elodie|élodie|sylvie|nathalie|hoda|amira|salma|sara|leila|noura|mariam|maja|laila|layla/i.test(voice.name);
+
+      setVoiceStatus({
+        arabic: voices.some(isArabic),
+        arabicFemale: voices.some((voice) => isArabic(voice) && isFemale(voice)),
+        frenchFemale: voices.some((voice) => isFrench(voice) && isFemale(voice))
+      });
+    };
+    updateVoices();
+    synth.onvoiceschanged = updateVoices;
+    return () => {
+      synth.onvoiceschanged = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem('astba_voice_prefs');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setVoicePrefs({
+          fr: parsed?.fr || '',
+          ar: parsed?.ar || '',
+          en: parsed?.en || ''
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // Student accommodation functions
   const openAccommodationModal = (studentId: number) => {
+    lastActifElementRef.current = document.activeElement as HTMLElement | null;
     setSelectedStudent(studentId);
     const existing = accommodations.find(a => a.studentId === studentId);
     if (existing) {
@@ -234,6 +281,55 @@ export default function Accessibility() {
     }
     setShowAccommodationModal(true);
   };
+
+  const closeAccommodationModal = useCallback(() => {
+    setShowAccommodationModal(false);
+    const activeElement = lastActifElementRef.current;
+    if (activeElement) {
+      activeElement.focus();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!showAccommodationModal) return;
+    const dialog = accommodationModalRef.current;
+    if (!dialog) return;
+
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeAccommodationModal();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+
+    dialog.addEventListener('keydown', handleKeyDown);
+    if (accommodationCloseButtonRef.current) {
+      accommodationCloseButtonRef.current.focus();
+    } else {
+      first?.focus();
+    }
+
+    return () => dialog.removeEventListener('keydown', handleKeyDown);
+  }, [showAccommodationModal, closeAccommodationModal]);
 
   const saveAccommodation = () => {
     if (selectedStudent === null) return;
@@ -278,10 +374,10 @@ export default function Accessibility() {
         </div>
       )}
       
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Paramètres d'Accessibilité</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2" tabIndex={-1}>Paramètres d'Accessibilité</h1>
             <p className="text-base text-gray-600">Personnalisez votre expérience pour une meilleure accessibilité</p>
           </div>
           
@@ -293,6 +389,100 @@ export default function Accessibility() {
           )}
         </div>
         
+      <Card className="mb-6 border-teal-200 bg-teal-50">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Tester le lecteur d?cran</h2>
+            <p className="text-sm text-gray-700">
+              Cliquez pour entendre une annonce via le lecteur d?cran. Activez aussi "Voix int?gr?e" pour des annonces vocales dans toute l'application.
+            </p>
+            <p className="text-xs text-gray-600 mt-2">Raccourci global : Alt + Shift + V</p>
+            <p className="text-xs text-gray-600 mt-1">La voix lit aussi les champs pendant la saisie (fran?ais, arabe, anglais).</p>
+            {!speechSupported && (
+              <p className="text-xs text-amber-700 mt-2">
+                La lecture vocale du navigateur n'est pas disponible sur cet appareil.
+              </p>
+            )}
+            {speechSupported && !voiceStatus.arabic && (
+              <p className="text-xs text-amber-700 mt-2">
+                Voix arabe non d?tect?e par Chrome. Red?marrez Chrome apr?s l'installation.
+              </p>
+            )}
+            {speechSupported && voiceStatus.arabic && !voiceStatus.arabicFemale && (
+              <p className="text-xs text-amber-700 mt-2">
+                Voix arabe trouv?e, mais pas de voix f?minine. La meilleure voix disponible sera utilis?e.
+              </p>
+            )}
+            {speechSupported && !voiceStatus.frenchFemale && (
+              <p className="text-xs text-amber-700 mt-2">
+                Aucune voix f?minine fran?aise d?tect?e. Une voix f?minine proche sera utilis?e.
+              </p>
+            )}
+            {screenReaderTestMessage && (
+              <p className="text-xs text-gray-600 mt-2">Dernier test : {screenReaderTestMessage}</p>
+            )}
+          </div>
+          <Button type="button" variant="primary" onClick={handleScreenReaderTest}>
+            <i className="ri-sound-module-line" aria-hidden="true"></i>
+            Lancer le test
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Choisir la voix</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          S?lectionnez une voix pr?f?r?e pour chaque langue (ou laissez sur Auto).
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label htmlFor="voice-fr" className="block text-sm font-medium text-gray-700 mb-1.5">Fran?ais</label>
+            <select
+              id="voice-fr"
+              value={voicePrefs.fr}
+              onChange={(e) => handleVoicePreferenceChange('fr', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+            >
+              <option value="">Auto (voix f?minine)</option>
+              {voiceOptionsFor('fr').map((voice) => (
+                <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} ({voice.lang})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="voice-ar" className="block text-sm font-medium text-gray-700 mb-1.5">Arabe</label>
+            <select
+              id="voice-ar"
+              value={voicePrefs.ar}
+              onChange={(e) => handleVoicePreferenceChange('ar', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+            >
+              <option value="">Auto (arabe)</option>
+              {voiceOptionsFor('ar').map((voice) => (
+                <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} ({voice.lang})</option>
+              ))}
+            </select>
+            {voiceOptionsFor('ar').length === 0 && (
+              <p className="text-xs text-amber-700 mt-1">Aucune voix arabe d?tect?e par Chrome.</p>
+            )}
+          </div>
+          <div>
+            <label htmlFor="voice-en" className="block text-sm font-medium text-gray-700 mb-1.5">Anglais</label>
+            <select
+              id="voice-en"
+              value={voicePrefs.en}
+              onChange={(e) => handleVoicePreferenceChange('en', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+            >
+              <option value="">Auto (anglais)</option>
+              {voiceOptionsFor('en').map((voice) => (
+                <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} ({voice.lang})</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Card>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Settings Column */}
           <div className="lg:col-span-2 space-y-6">
@@ -486,7 +676,7 @@ export default function Accessibility() {
                     }`}
                     role="switch"
                     aria-checked={settings.animations}
-                    aria-label="Activer les animations"
+                    aria-label="Actifr les animations"
                   >
                     <span
                       className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
@@ -514,7 +704,7 @@ export default function Accessibility() {
                     }`}
                     role="switch"
                     aria-checked={settings.screenReader}
-                    aria-label="Activer le support lecteur d'écran"
+                    aria-label="Actifr le support lecteur d'écran"
                   >
                     <span
                       className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
@@ -524,6 +714,34 @@ export default function Accessibility() {
                   </button>
                 </div>
                 
+                {/* Speech Feedback Toggle */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 flex items-center justify-center bg-sky-100 rounded-lg">
+                      <i className="ri-sound-module-line text-xl text-sky-600" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">Voix int?gr?e</p>
+                      <p className="text-sm text-gray-600">Annonce vocale via le navigateur</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateSetting('speechFeedback', !settings.speechFeedback)}
+                    className={`relative w-14 h-8 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer ${
+                      settings.speechFeedback ? 'bg-teal-600' : 'bg-gray-300'
+                    }`}
+                    role="switch"
+                    aria-checked={settings.speechFeedback}
+                    aria-label="Activer la voix int?gr?e"
+                  >
+                    <span
+                      className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
+                        settings.speechFeedback ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    ></span>
+                  </button>
+                </div>
+
                 {/* Focus Highlight Toggle */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
@@ -542,7 +760,7 @@ export default function Accessibility() {
                     }`}
                     role="switch"
                     aria-checked={settings.focusHighlight}
-                    aria-label="Activer la surbrillance du focus"
+                    aria-label="Actifr la surbrillance du focus"
                   >
                     <span
                       className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
@@ -570,7 +788,7 @@ export default function Accessibility() {
                     }`}
                     role="switch"
                     aria-checked={settings.simplifyUi}
-                    aria-label="Activer l'interface simplifiee"
+                    aria-label="Activer l'interface simplifi?e"
                   >
                     <span
                       className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
@@ -598,7 +816,7 @@ export default function Accessibility() {
                     }`}
                     role="switch"
                     aria-checked={settings.cursorSize === 'large'}
-                    aria-label="Activer le grand curseur"
+                    aria-label="Actifr le grand curseur"
                   >
                     <span
                       className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
@@ -624,10 +842,14 @@ export default function Accessibility() {
                     {[
                       { key: 'Tab', desc: 'Naviguer entre les éléments interactifs' },
                       { key: 'Shift + Tab', desc: 'Naviguer en arrière' },
-                      { key: 'Enter', desc: 'Activer les boutons et liens' },
+                      { key: 'Enter', desc: 'Actifr les boutons et liens' },
                       { key: 'Esc', desc: 'Fermer les dialogues et menus' },
                       { key: 'Space', desc: 'Basculer les cases à cocher et interrupteurs' },
-                      { key: '↑ ↓', desc: 'Naviguer dans les listes et menus' }
+                      { key: '↑ ↓', desc: 'Naviguer dans les listes et menus' },
+                      { key: 'Alt + Shift + A', desc: 'Aller à la page Présences' },
+                      { key: 'Alt + Shift + S', desc: 'Aller à la page Élèves' },
+                      { key: 'Alt + Shift + T', desc: 'Aller à la page Formations' },
+                      { key: 'Ctrl + K', desc: 'Ouvrir les commandes rapides' }
                     ].map((item, i) => (
                       <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                         <kbd className="px-3 py-1.5 bg-white border border-gray-300 rounded text-sm font-mono min-w-[80px] text-center">
@@ -685,7 +907,7 @@ export default function Accessibility() {
               )}
             </Card>
             
-            {/* Current Settings Summary */}
+            {/* Resume des param?tres */}
             <Card>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Résumé des Paramètres</h3>
               
@@ -770,9 +992,10 @@ export default function Accessibility() {
       {showAccommodationModal && student && (
         <div 
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowAccommodationModal(false)}
+          onClick={closeAccommodationModal}
         >
           <div 
+            ref={accommodationModalRef}
             className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
@@ -793,7 +1016,8 @@ export default function Accessibility() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowAccommodationModal(false)}
+                  ref={accommodationCloseButtonRef}
+                  onClick={closeAccommodationModal}
                   className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
                   aria-label="Fermer"
                 >
@@ -901,7 +1125,7 @@ export default function Accessibility() {
             </div>
             
             <div className="p-6 border-t border-gray-200 flex gap-3">
-              <Button variant="outline" fullWidth onClick={() => setShowAccommodationModal(false)}>
+              <Button variant="outline" fullWidth onClick={closeAccommodationModal}>
                 Annuler
               </Button>
               <Button variant="primary" fullWidth onClick={saveAccommodation}>

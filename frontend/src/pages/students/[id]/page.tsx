@@ -10,7 +10,7 @@ import { attendanceService } from '../../../services/attendance.service';
 import { sessionService } from '../../../services/session.service';
 import { enrollmentService } from '../../../services/enrollment.service';
 
-type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+type PresenceStatus = 'present' | 'absent' | 'late' | 'excused';
 type SessionItem = {
   id: number;
   levelNumber?: number | null;
@@ -23,14 +23,15 @@ type TrainingSummary = {
   name?: string | null;
   title?: string | null;
 };
-type AttendanceRecord = {
+type PresenceRecord = {
   id: number;
   sessionId: number;
-  status: AttendanceStatus;
+  status: PresenceStatus;
   date: string;
   student?: { id?: number | null };
 };
 
+// Student Detail Page Component
 export default function StudentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -38,7 +39,7 @@ export default function StudentDetail() {
   const [filterLevel, setFilterLevel] = useState<number | 'all'>('all');
   const [student, setStudent] = useState<any | null>(null);
   const [training, setTraining] = useState<any | null>(null);
-  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [attendanceRecords, setPresenceRecords] = useState<any[]>([]);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,7 +51,7 @@ export default function StudentDetail() {
 
       try {
         const progressData = await studentService.getProgressById(id);
-        const trainingId = progressData.trainingId ?? null;
+        const trainingId = progressData.trainingId || null;
 
         const [trainingsData, sessionsData, attendanceData, enrollmentsData] = await Promise.all([
           trainingService.getAll(),
@@ -59,34 +60,36 @@ export default function StudentDetail() {
           enrollmentService.getByStudent(Number(id))
         ]);
 
-        const trainingsList = (trainingsData ?? []) as TrainingSummary[];
-        const sessionsList = (sessionsData ?? []) as SessionItem[];
-        const attendanceList = (attendanceData ?? []) as AttendanceRecord[];
-        const enrollmentsList = (enrollmentsData ?? []) as any[];
+        const trainingsList = (trainingsData || []) as TrainingSummary[];
+        const sessionsList = (sessionsData || []) as SessionItem[];
+        const attendanceList = (attendanceData || []) as PresenceRecord[];
+        const enrollmentsList = (enrollmentsData || []) as any[];
 
         setTraining(trainingsList.find(t => t.id === trainingId) || null);
         setSessions(sessionsList);
         setEnrollments(enrollmentsList);
 
         const totalSessionsFromTraining = sessionsList.length > 0 ? sessionsList.length : 24;
-        const totalSessions = progressData.totalSessions ?? totalSessionsFromTraining;
-        const completedSessions = progressData.completedSessions ?? attendanceList.length;
+        const totalSessions = progressData.totalSessions || totalSessionsFromTraining;
+        const completedSessions = progressData.completedSessions || attendanceList.length;
         const presentCount = attendanceList.filter((record) => record.status === 'present' || record.status === 'late').length;
-        const attendanceRate = progressData.attendanceRate ?? (completedSessions > 0
+        const attendanceRate = progressData.attendanceRate || (completedSessions > 0
           ? Math.round((presentCount / completedSessions) * 100)
           : 0);
-        const eligibleForCertification = progressData.eligibleForCertification ?? (completedSessions >= totalSessions && attendanceRate >= 80);
+        const eligibleForCertification = typeof progressData.eligibleForCertification === 'boolean'
+          ? progressData.eligibleForCertification
+          : (completedSessions >= totalSessions && attendanceRate >= 80);
 
         setStudent({
-          id: progressData.studentId ?? progressData.id,
+          id: progressData.studentId || progressData.id,
           firstName: progressData.firstName,
           lastName: progressData.lastName,
           email: progressData.email,
           phone: progressData.phone,
           enrollmentDate: progressData.enrollmentDate,
-          status: progressData.status ?? 'active',
+          status: progressData.status || 'active',
           trainingId,
-          currentLevel: progressData.currentLevel ?? 1,
+          currentLevel: progressData.currentLevel || 1,
           totalSessions,
           completedSessions,
           attendanceRate,
@@ -97,24 +100,24 @@ export default function StudentDetail() {
         const sessionMap = new Map(
           sessionsList.map((session) => [session.id, session])
         );
-        const mappedAttendance = attendanceList.map((record) => {
+        const mappedPresence = attendanceList.map((record) => {
           const session = sessionMap.get(record.sessionId);
           return {
             id: record.id,
-            studentId: record.student?.id ?? Number(id),
-            level: session?.levelNumber ?? session?.level ?? 1,
-            sessionNumber: session?.sessionNumber ?? record.sessionId,
-            sessionTitle: session?.title ?? `Session ${record.sessionId}`,
+            studentId: record.student?.id || Number(id),
+            level: session?.levelNumber || session?.level || 1,
+            sessionNumber: session?.sessionNumber || record.sessionId,
+            sessionTitle: session?.title || `Session ${record.sessionId}`,
             date: record.date,
             status: record.status
           };
         });
-        setAttendanceRecords(mappedAttendance);
+        setPresenceRecords(mappedPresence);
       } catch (error) {
         console.error("Failed to load student details", error);
         setStudent(null);
         setTraining(null);
-        setAttendanceRecords([]);
+        setPresenceRecords([]);
         setSessions([]);
         setEnrollments([]);
       } finally {
@@ -135,7 +138,7 @@ export default function StudentDetail() {
     return { total, present, absent, late, excused };
   }, [attendanceRecords]);
   
-  const filteredAttendance = useMemo(() => {
+  const filteredPresence = useMemo(() => {
     if (filterLevel === 'all') return attendanceRecords;
     return attendanceRecords.filter(r => r.level === filterLevel);
   }, [attendanceRecords, filterLevel]);
@@ -205,7 +208,7 @@ export default function StudentDetail() {
     return history;
   }, [training, attendanceRecords, student, sessions, levelOptions]);
   
-  const getStatusBadge = (status: AttendanceStatus) => {
+  const getStatusBadge = (status: PresenceStatus) => {
     const config = {
       present: { variant: 'success' as const, icon: 'ri-check-line', label: 'Present' },
       absent: { variant: 'danger' as const, icon: 'ri-close-line', label: 'Absent' },
@@ -234,7 +237,7 @@ export default function StudentDetail() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Card>
             <div className="text-center py-16">
               <i className="ri-loader-4-line text-4xl text-gray-400 animate-spin mb-4" aria-hidden="true"></i>
@@ -251,7 +254,7 @@ export default function StudentDetail() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Card>
             <div className="text-center py-16">
               <div className="w-20 h-20 flex items-center justify-center bg-gray-100 rounded-full mx-auto mb-6">
@@ -262,7 +265,7 @@ export default function StudentDetail() {
               <Link to="/students">
                 <Button variant="primary">
                   <i className="ri-arrow-left-line mr-2" aria-hidden="true"></i>
-                  Back to Students
+                  Retour aux Eleves
                 </Button>
               </Link>
             </div>
@@ -276,7 +279,7 @@ export default function StudentDetail() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
         <nav className="mb-6" aria-label="Breadcrumb">
           <ol className="flex items-center gap-2 text-sm">
@@ -285,7 +288,7 @@ export default function StudentDetail() {
                 to="/students" 
                 className="text-gray-500 hover:text-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500 rounded cursor-pointer"
               >
-                Students
+                Eleves
               </Link>
             </li>
             <li aria-hidden="true">
@@ -307,7 +310,7 @@ export default function StudentDetail() {
               <div className="w-24 h-24 flex items-center justify-center bg-teal-100 text-teal-700 rounded-full mx-auto mb-4 text-3xl font-bold">
                 {(student.firstName?.[0] || '?')}{(student.lastName?.[0] || '')}
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-1">
+              <h1 className="text-2xl font-bold text-gray-900 mb-1" tabIndex={-1}>
                 {student.firstName} {student.lastName}
               </h1>
               <p className="text-gray-500 mb-4">Student ID: {student.id}</p>
@@ -316,7 +319,7 @@ export default function StudentDetail() {
                 {student.eligibleForCertification ? (
                   <Badge variant="success">
                     <i className="ri-award-line mr-1" aria-hidden="true"></i>
-                    Eligible for Certification
+                    ?ligible ? la certification
                   </Badge>
                 ) : (
                   <Badge variant="info">
@@ -392,7 +395,7 @@ export default function StudentDetail() {
                   <i className="ri-pie-chart-line text-2xl text-amber-600" aria-hidden="true"></i>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Attendance Rate</p>
+                  <p className="text-sm text-gray-600">Taux de pr?sence</p>
                   <p className="text-2xl font-bold text-gray-900">{student.attendanceRate}%</p>
                 </div>
               </div>
@@ -451,7 +454,7 @@ export default function StudentDetail() {
             <nav className="flex gap-1" role="tablist" aria-label="Student information tabs">
               {[
                 { id: 'overview', label: 'Overview', icon: 'ri-dashboard-line' },
-                { id: 'attendance', label: 'Attendance History', icon: 'ri-calendar-check-line' },
+                { id: 'attendance', label: 'Historique des pr?sences', icon: 'ri-calendar-check-line' },
                 { id: 'progress', label: 'Level Progress', icon: 'ri-bar-chart-line' }
               ].map((tab) => (
                 <button
@@ -477,11 +480,11 @@ export default function StudentDetail() {
         {/* Tab Content */}
         {activeTab === 'overview' && (
           <div id="overview-panel" role="tabpanel" aria-labelledby="overview-tab" className="space-y-6">
-            {/* Attendance Summary */}
+            {/* Presence Resume */}
             <Card>
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <i className="ri-pie-chart-2-line text-teal-600" aria-hidden="true"></i>
-                Attendance Summary
+                Presence Resume
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="p-4 bg-green-50 rounded-xl text-center">
@@ -515,7 +518,7 @@ export default function StudentDetail() {
               </div>
             </Card>
 
-            {/* Enrollment History */}
+            {/* Historique des inscriptions */}
             <Card>
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <i className="ri-clipboard-line text-teal-600" aria-hidden="true"></i>
@@ -555,11 +558,11 @@ export default function StudentDetail() {
               )}
             </Card>
             
-            {/* Training History */}
+            {/* Historique des formations */}
             <Card>
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <i className="ri-history-line text-teal-600" aria-hidden="true"></i>
-                Training History by Level
+                Historique des formations par niveau
               </h2>
               <div className="space-y-4">
                 {trainingHistory.map((item) => (
@@ -690,11 +693,11 @@ export default function StudentDetail() {
                       )}
                     </div>
                     
-                    {/* Attendance Rate Badge */}
+                    {/* Taux de pr?sence Badge */}
                     {item.completed > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-200">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Attendance Rate for this Level:</span>
+                          <span className="text-sm text-gray-600">Taux de pr?sence for this Level:</span>
                           <Badge variant={item.attendanceRate >= 80 ? 'success' : item.attendanceRate >= 60 ? 'warning' : 'danger'}>
                             <i className="ri-bar-chart-line mr-1" aria-hidden="true"></i>
                             {item.attendanceRate}%
@@ -706,7 +709,7 @@ export default function StudentDetail() {
                 ))}
               </div>
               
-              {/* Overall Training Summary */}
+              {/* Overall Training Resume */}
               <div className="mt-6 p-4 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
@@ -752,7 +755,7 @@ export default function StudentDetail() {
                         </p>
                       </div>
                     </div>
-                    {getStatusBadge(record.status as AttendanceStatus)}
+                    {getStatusBadge(record.status as PresenceStatus)}
                   </div>
                 ))}
               </div>
@@ -784,8 +787,8 @@ export default function StudentDetail() {
                     {student.eligibleForCertification 
                       ? 'This student has completed all required sessions and is eligible to receive their certificate.'
                       : (student.blockReason && student.blockReason.trim() !== ''
-                        ? student.blockReason
-                        : `${student.totalSessions - student.completedSessions} sessions remaining to complete the training program.`)}
+                        ? `Reason: ${student.blockReason}`
+                        : `Reason: ${student.totalSessions - student.completedSessions} sessions remaining to complete the training program.`)}
                   </p>
                 </div>
                 {student.eligibleForCertification && (
@@ -807,10 +810,10 @@ export default function StudentDetail() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <i className="ri-calendar-check-line text-teal-600" aria-hidden="true"></i>
-                  Attendance History
+                  Historique des pr?sences
                 </h2>
                 <div className="flex items-center gap-2">
-                  <label htmlFor="filter-level" className="text-sm text-gray-600">Filter by Level:</label>
+                  <label htmlFor="filter-level" className="text-sm text-gray-600">Filtrer par niveau :</label>
                   <select
                     id="filter-level"
                     value={filterLevel}
@@ -827,7 +830,7 @@ export default function StudentDetail() {
               
               {/* Desktop Table */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="w-full" role="table" aria-label="Attendance history">
+                <table className="w-full" role="table" aria-label="Presence history">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
                       <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Date</th>
@@ -838,7 +841,7 @@ export default function StudentDetail() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {filteredAttendance.map((record) => (
+                    {filteredPresence.map((record) => (
                       <tr key={record.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 text-sm text-gray-900">{formatDate(record.date)}</td>
                         <td className="px-4 py-3">
@@ -848,7 +851,7 @@ export default function StudentDetail() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-900">Session {record.sessionNumber}</td>
                         <td className="px-4 py-3 text-sm text-gray-900">{record.sessionTitle}</td>
-                        <td className="px-4 py-3">{getStatusBadge(record.status as AttendanceStatus)}</td>
+                        <td className="px-4 py-3">{getStatusBadge(record.status as PresenceStatus)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -857,7 +860,7 @@ export default function StudentDetail() {
               
               {/* Mobile Cards */}
               <div className="md:hidden space-y-3">
-                {filteredAttendance.map((record) => (
+                {filteredPresence.map((record) => (
                   <div key={record.id} className="p-4 bg-gray-50 rounded-xl">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
@@ -869,14 +872,14 @@ export default function StudentDetail() {
                           <p className="text-xs text-gray-500">{formatDate(record.date)}</p>
                         </div>
                       </div>
-                      {getStatusBadge(record.status as AttendanceStatus)}
+                      {getStatusBadge(record.status as PresenceStatus)}
                     </div>
                     <p className="text-sm text-gray-700">{record.sessionTitle}</p>
                   </div>
                 ))}
               </div>
               
-              {filteredAttendance.length === 0 && (
+              {filteredPresence.length === 0 && (
                 <div className="text-center py-12">
                   <i className="ri-calendar-line text-5xl text-gray-300 mb-4" aria-hidden="true"></i>
                   <p className="text-gray-600">No attendance records found for this filter.</p>
@@ -986,14 +989,14 @@ export default function StudentDetail() {
             onClick={() => navigate('/students')}
             icon={<i className="ri-arrow-left-line text-xl" aria-hidden="true"></i>}
           >
-            Back to Students
+            Retour aux Eleves
           </Button>
           <Link to="/attendance">
             <Button 
               variant="primary"
               icon={<i className="ri-checkbox-line text-xl" aria-hidden="true"></i>}
             >
-              Mark Attendance
+              Marquer les pr?sences
             </Button>
           </Link>
         </div>
